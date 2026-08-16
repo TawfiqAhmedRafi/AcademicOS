@@ -1,11 +1,20 @@
 @import "tailwindcss";
 
+/* Tells Tailwind v4 to trigger dark mode classes when the .dark class is present */
+@custom-variant dark (&:is(.dark *));
+
 :root {
   --background: #f8fafc;
   --foreground: #020617;
   --ruet-blue: #002B49;
   --ruet-green: #006A4E;
   --ruet-gold: #F59E0B;
+}
+
+/* Replaces the @media (prefers-color-scheme: dark) block */
+.dark {
+  --background: #020617; /* Deep cinematic slate */
+  --foreground: #f8fafc;
 }
 
 @theme inline {
@@ -16,13 +25,6 @@
   --color-ruet-gold: var(--ruet-gold);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #020617; /* Deep cinematic slate */
-    --foreground: #f8fafc;
-  }
 }
 
 body {
