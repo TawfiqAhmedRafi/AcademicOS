@@ -1,26 +1,42 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc;
+  --foreground: #020617;
+  --ruet-blue: #002B49;
+  --ruet-green: #006A4E;
+  --ruet-gold: #F59E0B;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-ruet-blue: var(--ruet-blue);
+  --color-ruet-green: var(--ruet-green);
+  --color-ruet-gold: var(--ruet-gold);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #020617; /* Deep cinematic slate */
+    --foreground: #f8fafc;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), sans-serif;
+  overflow-x: hidden;
+}
+
+/* Custom Glassmorphism Utilities */
+.glass-panel {
+  @apply bg-white/70 backdrop-blur-lg border border-white/20 shadow-xl dark:bg-black/40 dark:border-white/10;
+}
+
+.glass-nav {
+  @apply bg-white/60 backdrop-blur-md border-b border-white/20 dark:bg-[#020617]/70 dark:border-white/10;
 }
