@@ -26,13 +26,20 @@ export default function Navbar() {
     <nav className="glass-nav fixed top-0 left-0 right-0 z-50 w-full transition-all duration-300">
       <div className="w-full px-4 sm:px-6 lg:px-12 2xl:px-24">
         <div className="flex h-20 items-center justify-between">
-          
           {/* LEFT: Logo & Brand */}
           <div className="flex flex-shrink-0 items-center gap-3">
-            <div className="relative h-10 w-10 overflow-hidden rounded-xl shadow-lg ring-1 ring-white/20">
-              <Image src="/logo.png" alt="AOS Logo" fill className="object-cover" />
-            </div>
-            <Link href="/" className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            <Image
+              src="/logo.png"
+              alt="Academic OS Logo"
+              width={48}
+              height={48}
+              className="h-10 w-10 sm:h-11 sm:w-11 lg:h-14 lg:w-14 2xl:h-16 2xl:w-16 object-contain"
+            />
+
+            <Link
+              href="/"
+              className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white"
+            >
               Academic <span className="text-ruet-gold">OS</span>
             </Link>
           </div>
@@ -40,17 +47,41 @@ export default function Navbar() {
           {/* MIDDLE: Clean, Dedicated Navigation Tabs */}
           <div className="hidden lg:block">
             <div className="flex items-center space-x-8">
-              <Link href="/" className="text-sm font-medium text-slate-900 transition-colors hover:text-ruet-blue dark:text-slate-300 dark:hover:text-ruet-gold">
+              <Link
+                href="/"
+                className="text-sm font-medium text-slate-900 transition-colors hover:text-ruet-blue dark:text-slate-300 dark:hover:text-ruet-gold"
+              >
                 Home
               </Link>
-              <Link href="/modules" className="text-sm font-medium text-slate-900 transition-colors hover:text-ruet-blue dark:text-slate-300 dark:hover:text-ruet-gold">
+              <Link
+                href="/modules"
+                className="text-sm font-medium text-slate-900 transition-colors hover:text-ruet-blue dark:text-slate-300 dark:hover:text-ruet-gold"
+              >
                 All Modules
               </Link>
-              <Link href="/match" className="text-sm font-medium text-slate-900 transition-colors hover:text-ruet-blue dark:text-slate-300 dark:hover:text-ruet-gold">
-                Match Project/Thesis
+              <Link
+                href="/match"
+                className="text-sm font-medium text-slate-900 transition-colors hover:text-ruet-blue dark:text-slate-300 dark:hover:text-ruet-gold"
+              >
+                Match Project
+              </Link>
+              <Link
+                href="/notice"
+                className="text-sm font-medium text-slate-900 transition-colors hover:text-ruet-blue dark:text-slate-300 dark:hover:text-ruet-gold"
+              >
+               All Notices
+              </Link>
+              <Link
+                href="/routine"
+                className="text-sm font-medium text-slate-900 transition-colors hover:text-ruet-blue dark:text-slate-300 dark:hover:text-ruet-gold"
+              >
+               Routine
               </Link>
               {isAuthenticated && (
-                <Link href="/dashboard" className="text-sm font-medium text-slate-900 transition-colors hover:text-ruet-blue dark:text-slate-300 dark:hover:text-ruet-gold">
+                <Link
+                  href="/dashboard"
+                  className="text-sm font-medium text-slate-900 transition-colors hover:text-ruet-blue dark:text-slate-300 dark:hover:text-ruet-gold"
+                >
                   Dashboard
                 </Link>
               )}
@@ -59,21 +90,26 @@ export default function Navbar() {
 
           {/* RIGHT: Utilities & Auth */}
           <div className="flex items-center gap-3 sm:gap-6">
-            
             {/* Always visible utilities (Bell + Theme Toggle) */}
             <div className="flex items-center gap-3 sm:gap-4">
               <button className="rounded-full p-2 text-slate-500 transition-all hover:bg-slate-100 hover:text-ruet-gold dark:text-slate-400 dark:hover:bg-white/5">
                 <Bell size={20} />
               </button>
-              
+
               {/* Hydration-safe Theme Toggle */}
               {mounted ? (
-                <button 
-                  onClick={() => setTheme(currentTheme === "dark" ? "light" : "dark")}
+                <button
+                  onClick={() =>
+                    setTheme(currentTheme === "dark" ? "light" : "dark")
+                  }
                   className="rounded-full p-2 text-slate-500 transition-all hover:bg-slate-100 hover:text-ruet-gold dark:text-slate-400 dark:hover:bg-white/5"
                   aria-label="Toggle Dark Mode"
                 >
-                  {currentTheme === "dark" ? <Sun size={20} /> : <Moon size={20} />}
+                  {currentTheme === "dark" ? (
+                    <Sun size={20} />
+                  ) : (
+                    <Moon size={20} />
+                  )}
                 </button>
               ) : (
                 // Placeholder of the exact same size to prevent layout shift before mount
@@ -85,10 +121,16 @@ export default function Navbar() {
 
             {/* Auth Buttons (Desktop only) */}
             <div className="hidden items-center gap-4 lg:flex">
-              <Link href="/login" className="text-sm font-semibold text-slate-900 transition-colors hover:text-ruet-gold dark:text-white">
+              <Link
+                href="/login"
+                className="text-sm font-semibold text-slate-900 transition-colors hover:text-ruet-gold dark:text-white"
+              >
                 Sign In
               </Link>
-              <Link href="/login" className="rounded-xl bg-ruet-blue px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-blue-900 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400">
+              <Link
+                href="/login"
+                className="rounded-xl bg-ruet-blue px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-blue-900 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400"
+              >
                 Portal Access
               </Link>
             </div>
@@ -108,17 +150,57 @@ export default function Navbar() {
       {isOpen && (
         <div className="glass-panel border-t border-white/10 lg:hidden">
           <div className="flex flex-col space-y-2 px-4 pb-6 pt-4">
-            <Link href="/" className="block rounded-lg px-4 py-3 text-base font-medium text-slate-900 hover:bg-white/5 dark:text-white">Home</Link>
-            <Link href="/modules" className="block rounded-lg px-4 py-3 text-base font-medium text-slate-900 hover:bg-white/5 dark:text-white">All Modules</Link>
-            <Link href="/match" className="block rounded-lg px-4 py-3 text-base font-medium text-slate-900 hover:bg-white/5 dark:text-white">Match Project/Thesis</Link>
+            <Link
+              href="/"
+              className="block rounded-lg px-4 py-3 text-base font-medium text-slate-900 hover:bg-white/5 dark:text-white"
+            >
+              Home
+            </Link>
+            <Link
+              href="/modules"
+              className="block rounded-lg px-4 py-3 text-base font-medium text-slate-900 hover:bg-white/5 dark:text-white"
+            >
+              All Modules
+            </Link>
+            <Link
+              href="/match"
+              className="block rounded-lg px-4 py-3 text-base font-medium text-slate-900 hover:bg-white/5 dark:text-white"
+            >
+              Match Project
+            </Link>
+            <Link
+              href="/notice"
+              className="block rounded-lg px-4 py-3 text-base font-medium text-slate-900 hover:bg-white/5 dark:text-white"
+            >
+              All Notices
+            </Link>
+            <Link
+              href="/routine"
+              className="block rounded-lg px-4 py-3 text-base font-medium text-slate-900 hover:bg-white/5 dark:text-white"
+            >
+               Routine
+            </Link>
             {isAuthenticated && (
-              <Link href="/dashboard" className="block rounded-lg px-4 py-3 text-base font-medium text-slate-900 hover:bg-white/5 dark:text-white">Dashboard</Link>
+              <Link
+                href="/dashboard"
+                className="block rounded-lg px-4 py-3 text-base font-medium text-slate-900 hover:bg-white/5 dark:text-white"
+              >
+                Dashboard
+              </Link>
             )}
-            
+
             <div className="my-2 h-px w-full bg-slate-200 dark:bg-slate-700"></div>
-            
-            <Link href="/login" className="block rounded-lg px-4 py-3 text-base font-medium text-slate-900 hover:bg-white/5 dark:text-white">Sign In</Link>
-            <Link href="/login" className="mt-2 block w-full rounded-xl bg-ruet-gold px-4 py-3 text-center text-base font-bold text-black hover:bg-amber-400">
+
+            <Link
+              href="/login"
+              className="block rounded-lg px-4 py-3 text-base font-medium text-slate-900 hover:bg-white/5 dark:text-white"
+            >
+              Sign In
+            </Link>
+            <Link
+              href="/login"
+              className="mt-2 block w-full rounded-xl bg-ruet-gold px-4 py-3 text-center text-base font-bold text-black hover:bg-amber-400"
+            >
               Portal Access
             </Link>
           </div>
