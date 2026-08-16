@@ -23,7 +23,9 @@
 # misc
 .DS_Store
 *.pem
-
+Academic os plan.pdf
+AOS_Full_Plan.pdf
+AOS_Website_Plan.pdf
 # debug
 npm-debug.log*
 yarn-debug.log*
