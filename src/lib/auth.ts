@@ -90,6 +90,7 @@ export const authOptions: NextAuthOptions = {
                     token.role = dbUser.role;
                     token.series = dbUser.series;
                     token.department = dbUser.department;
+                    token.picture = dbUser.profile_photo_url;
                 }
             }
             return token;

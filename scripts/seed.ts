@@ -8,16 +8,15 @@ dotenv.config();
 
 const MONGODB_URI = process.env.MONGODB_URI;
 if (!MONGODB_URI) {
-  throw new Error("Please define the MONGODB_URI environment variable inside .env.local");
+  throw new Error("Please define the MONGODB_URI environment variable inside .env");
 }
 
 const EXCEL_FILE_PATH = path.resolve(process.cwd(), "ETE Department.xlsx");
-const DEFAULT_PASSWORD = "ruet1234";
 
 // Faculty list parsed from your prompt
 const facultyList = [
   { name: "Dr. Md. Kamal Hosain", email: "khosain@ete.ruet.ac.bd", role: "dept_head" },
-  { name: "Dr. Mst. Fateha Samad", email: "fateha@ete.ruet.ac.bd", role: "faculty" }, // Added default email
+  { name: "Dr. Mst. Fateha Samad", email: "fateha@ete.ruet.ac.bd", role: "faculty" },
   { name: "Md. Aslam Mollah", email: "ruet10aslam@gmail.com", role: "faculty" },
   { name: "Dr. Md. Yeakub Ali", email: "yeakub@ete.ruet.ac.bd", role: "faculty" },
   { name: "Md. Rakib Hossain", email: "rakib.hossain@ete.ruet.ac.bd", role: "faculty" },
@@ -41,74 +40,80 @@ async function seedDatabase() {
     const db = client.db("academicos");
     const usersCollection = db.collection("users");
 
-    // Hash the default temporary password
-    console.log(`Hashing default password: ${DEFAULT_PASSWORD}...`);
-    const password_hash = await bcrypt.hash(DEFAULT_PASSWORD, 12);
-
     const usersToInsert: any[] = [];
+    let processedCount = 0;
 
-    // 1. Process the Faculty ListF
-    console.log("Preparing Faculty records...");
+    // 1. Process the Faculty List
+    console.log("Preparing Faculty records (this will take a moment to hash passwords)...");
     for (const faculty of facultyList) {
+      // Use their exact email as the temporary password
+      const password_hash = await bcrypt.hash(faculty.email, 12);
+
       usersToInsert.push({
         name: faculty.name,
         email: faculty.email,
         password_hash,
         role: faculty.role,
         department: "ETE",
-        needs_setup: true, // Forces them to change password and upload photo on first login
+        needs_setup: true, 
         loginAttempts: 0,
         createdAt: new Date(),
       });
+      processedCount++;
     }
 
     // 2. Process the Excel File for Students
     console.log("Reading ETE Department.xlsx...");
     const workbook = xlsx.readFile(EXCEL_FILE_PATH);
     
-    // Iterate through all the series tabs (e.g., 20 Series, 21 Series...)
     for (const sheetName of workbook.SheetNames) {
-      // Extract the series number (e.g., "22" from "22 Series_ETE")
       const seriesMatch = sheetName.match(/(\d{2})/);
       if (!seriesMatch) continue;
       
       const series = seriesMatch[1];
-      console.log(`Parsing sheet: ${sheetName} (Series ${series})...`);
+      console.log(`Hashing students for Series ${series}...`);
 
       const sheet = workbook.Sheets[sheetName];
-      // The Excel format has a weird header, so we start reading from row index 1 (the 2nd row)
-      const data = xlsx.utils.sheet_to_json<any>(sheet, { range: 1 });
+      const rows = xlsx.utils.sheet_to_json<any[]>(sheet, { header: 1 });
 
-      for (const row of data) {
-        const roll = row["Roll"] || row["Student ID"];
-        const name = row["Name"];
+      for (let i = 2; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length < 3) continue;
 
-        if (roll && name) {
-          // Construct the strict RUET email format
+        const roll = row[1] || row[3]; 
+        const name = row[2];
+
+        if (roll && name && typeof name === "string" && !isNaN(Number(roll))) {
           const email = `${roll}@student.ruet.ac.bd`;
+          
+          // Use their exact email as the temporary password
+          const password_hash = await bcrypt.hash(email, 12);
 
           usersToInsert.push({
-            name: name,
+            name: name.trim(),
             email: email,
             student_id: roll.toString(),
             series: series,
             password_hash,
             role: "student",
             department: "ETE",
-            needs_setup: true, // Intercepts their first login
+            needs_setup: true, 
             loginAttempts: 0,
             createdAt: new Date(),
           });
+          
+          processedCount++;
+          if (processedCount % 50 === 0) {
+            console.log(`... Hashed ${processedCount} users so far ...`);
+          }
         }
       }
     }
 
     // 3. Insert everything into MongoDB
-    console.log(`Inserting ${usersToInsert.length} users into the database...`);
+    console.log(`Inserting all ${usersToInsert.length} users into the database...`);
     
-    // Clear the collection first to avoid duplicates if you run it multiple times (optional)
     await usersCollection.deleteMany({});
-    
     const result = await usersCollection.insertMany(usersToInsert);
     console.log(`🎉 Successfully seeded ${result.insertedCount} users!`);
 
