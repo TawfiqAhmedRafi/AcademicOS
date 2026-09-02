@@ -37,24 +37,29 @@ export const authOptions: NextAuthOptions = {
                 }
 
                 const isPasswordValid = await bcrypt.compare(credentials.password, user.password_hash);
-                console.log("3. Password match result:", isPasswordValid);
+
                 if (!isPasswordValid) {
-                    const attempts = (user.loginAttempts || 0) + 1;
-                    const updates: any = { $set: { loginAttempts: attempts } };
+                    // Use MongoDB's atomic $inc to prevent concurrent bypass attacks
+                    const updatedUser = await db.collection("users").findOneAndUpdate(
+                        { _id: user._id },
+                        { $inc: { loginAttempts: 1 } },
+                        { returnDocument: 'after' } // Tells MongoDB to return the updated count
+                    );
 
-                    // If they hit 5 attempts, lock the account for exactly 15 minutes
-                    if (attempts >= 5) {
-                        updates.$set.lockoutUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
-                    }
-                    await db.collection("users").updateOne({ _id: user._id }, updates);
+                    // Handle differences in MongoDB native driver versions
+                    const attempts = updatedUser?.loginAttempts || updatedUser?.value?.loginAttempts || 1;
 
                     if (attempts >= 5) {
+                        // Lock for 15 minutes atomically
+                        await db.collection("users").updateOne(
+                            { _id: user._id },
+                            { $set: { lockoutUntil: new Date(Date.now() + 15 * 60 * 1000) } }
+                        );
                         throw new Error("Account locked due to 5 failed attempts. Try again in 15 minutes.");
                     } else {
                         throw new Error("Invalid email or password");
                     }
                 }
-
                 if (user.needs_setup) {
                     console.log("⚠️ INTERCEPT: Throwing NEEDS_SETUP error to trigger frontend UI.");
                     throw new Error("NEEDS_SETUP");

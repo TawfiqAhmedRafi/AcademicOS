@@ -18,10 +18,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Invalid request" }, { status: 400 });
     }
 
-    // Verify the temporary password one last time for security
+// Verify the temporary password one last time for security
     const isTempValid = await bcrypt.compare(tempPassword, user.password_hash);
     if (!isTempValid) {
       return NextResponse.json({ message: "Authentication failed" }, { status: 401 });
+    }
+
+    // NEW SECURITY CHECK: Prevent reusing the temporary password
+    if (tempPassword === newPassword) {
+      return NextResponse.json(
+        { message: "Your new password must be different from the temporary password." }, 
+        { status: 400 }
+      );
     }
 
     // Hash the new, secure password
