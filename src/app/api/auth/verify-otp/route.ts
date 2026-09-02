@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+
+const JWT_SECRET = process.env.JWT_SECRET || "fallback_super_secret_key";
 
 export async function POST(req: Request) {
   try {
@@ -17,7 +20,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "OTP has expired" }, { status: 400 });
     }
 
-    // Stop brute-forcing the 6-digit code
     if (user.otpAttempts >= 5) {
       await db.collection("users").updateOne({ email }, { $unset: { resetOtp: "", otpExpiry: "", otpAttempts: "" } });
       return NextResponse.json({ message: "Too many failed attempts. Request a new OTP." }, { status: 429 });
@@ -30,7 +32,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Invalid OTP" }, { status: 400 });
     }
 
-    return NextResponse.json({ message: "OTP verified successfully" }, { status: 200 });
+    // SUCCESS! Generate a 5-minute reset token
+    const resetToken = jwt.sign({ email: user.email }, JWT_SECRET, { expiresIn: "5m" });
+
+    const response = NextResponse.json({ message: "OTP verified successfully" }, { status: 200 });
+    
+    // Set the token as a secure, HTTP-only cookie
+    response.cookies.set({
+      name: "reset_token",
+      value: resetToken,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 5 * 60, // 5 minutes
+      path: "/",
+    });
+
+    return response;
   } catch (error) {
     return NextResponse.json({ message: "Internal server error" }, { status: 500 });
   }

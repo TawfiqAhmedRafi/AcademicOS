@@ -16,7 +16,7 @@ export const authOptions: NextAuthOptions = {
             },
             async authorize(credentials) {
                 console.log("--- AUTH ATTEMPT ---");
-                console.log("1. Email entered:", credentials?.email);
+                console.log("1. Email entered:");
 
                 if (!credentials?.email || !credentials?.password) return null;
 
@@ -29,7 +29,7 @@ export const authOptions: NextAuthOptions = {
                     throw new Error("Invalid email or password");
                 }
 
-                console.log("2. User found in DB. needs_setup =", user.needs_setup);
+                console.log("2. User found in DB.");
 
                 if (user.lockoutUntil && new Date(user.lockoutUntil) > new Date()) {
                     console.log("❌ ERROR: Account is locked.");

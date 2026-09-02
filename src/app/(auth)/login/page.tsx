@@ -59,7 +59,7 @@ function LoginForm() {
       } else if (res.error === "CredentialsSignin") {
         setErrorMsg("Invalid email or password"); // Standard failure
       } else {
-        // Displays custom errors like the 30-minute lockout
+        // Displays custom errors like the 15-minute lockout
         setErrorMsg(res.error); 
       }
       setIsLoading(false);
@@ -198,7 +198,7 @@ function LoginForm() {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="2204047@student.ruet.ac.bd"
+                    placeholder="Enter your institutional email"
                     className="w-full rounded-xl border border-slate-300 bg-white/50 py-3 pl-10 pr-4 text-sm focus:border-ruet-blue focus:outline-none focus:ring-1 focus:ring-ruet-blue dark:border-white/10 dark:bg-black/20 dark:text-white dark:focus:border-ruet-gold dark:focus:ring-ruet-gold"
                   />
                 </div>
@@ -207,6 +207,15 @@ function LoginForm() {
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Password</label>
+                  
+                  {/* FORGOT PASSWORD LINK ADDED HERE */}
+                  <Link 
+                    href="/forgot-password" 
+                    className="text-xs font-semibold text-ruet-blue transition-colors hover:text-blue-800 hover:underline dark:text-ruet-gold dark:hover:text-amber-400"
+                  >
+                    Forgot password?
+                  </Link>
+
                 </div>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
