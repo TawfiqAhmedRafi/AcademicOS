@@ -2,11 +2,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
+// Isolate imports to avoid bloating a single file
 import StudentView from "@/app/components/dashboard/views/StudentView";
-// Import the other views once you create them:
-// import FacultyView from "@/app/components/dashboard/views/FacultyView";
-// import DeptHeadView from "@/app/components/dashboard/views/DeptHeadView";
-// import AdminView from "@/app/components/dashboard/views/AdminView";
+import FacultyView from "@/app/components/dashboard/views/FacultyView";
+import DeptHeadView from "@/app/components/dashboard/views/DeptHeadView";
+import AdminView from "@/app/components/dashboard/views/AdminView";
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
@@ -17,20 +17,20 @@ export default async function DashboardPage() {
 
   const { role } = session.user;
 
-  // Render the heavily stacked modular views based on role
+  // The Traffic Cop: Renders the precise, isolated Command Center per role
   switch (role) {
     case "student":
       return <StudentView user={session.user} />;
     case "faculty":
-      // return <FacultyView user={session.user} />;
-      return <div>Faculty View Placeholder</div>;
+    case "advisor": 
+      // Advisors get the faculty view as a base on the homepage. 
+      // Their extra tools are isolated in the sidebar navigation.
+      return <FacultyView user={session.user} />;
     case "dept_head":
-      // return <DeptHeadView user={session.user} />;
-      return <div>Dept Head View Placeholder</div>;
+      return <DeptHeadView user={session.user} />;
     case "admin":
-      // return <AdminView user={session.user} />;
-      return <div>Admin View Placeholder</div>;
+      return <AdminView user={session.user} />;
     default:
-      return <div>Dashboard Placeholder</div>;
+      return <div>Unrecognized Role. Please contact IT.</div>;
   }
 }
