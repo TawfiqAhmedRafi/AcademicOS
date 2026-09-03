@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
 import bcrypt from "bcryptjs";
 import { ObjectId } from "mongodb";
-
+import { logSystemAction } from "@/lib/logger";
 // Academic Rank weights for sorting (Lower number = higher in the list)
 const rankWeights: Record<string, number> = {
   "Professor": 1,
@@ -74,6 +74,11 @@ export async function POST(req: Request) {
   } catch (error) {
     return NextResponse.json({ error: "Failed to add faculty" }, { status: 500 });
   }
+  await logSystemAction(
+  "New faculty account provisioned", 
+  "Audit", 
+  `Account created for ${email} with designation ${designation}`
+);
 }
 
 export async function PATCH(req: Request) {
@@ -112,4 +117,9 @@ export async function PATCH(req: Request) {
   } catch (error) {
     return NextResponse.json({ error: "Failed to update record" }, { status: 500 });
   }
+  await logSystemAction(
+  "Department Head Reassigned", 
+  "Audit", 
+  `User ID ${userId} was promoted to Department Head`
+);
 }
