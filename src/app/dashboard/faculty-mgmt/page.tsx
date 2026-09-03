@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { UserPlus, Star, Mail, Loader2, X, Briefcase, GraduationCap, ChevronUp } from "lucide-react";
 import DropdownFilter from "@/app/components/DropdownFilter";
-
+import { useToast } from "@/app/components/ToastProvider";
 type Faculty = {
   _id: string;
   name: string;
@@ -35,6 +35,7 @@ export default function FacultyManagement() {
   const [newDesignation, setNewDesignation] = useState("Lecturer");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const { showToast } = useToast();
   const fetchFaculties = async () => {
     setIsLoading(true);
     const res = await fetch("/api/admin/faculty");
@@ -52,21 +53,23 @@ export default function FacultyManagement() {
   const handleAddFaculty = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    
+         
     const res = await fetch("/api/admin/faculty", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: newName, email: newEmail, designation: newDesignation }),
     });
-
+    
     if (res.ok) {
       setIsAddModalOpen(false);
       setNewName("");
       setNewEmail("");
       setNewDesignation("Lecturer");
+      showToast("Faculty account created successfully.", "success");
       fetchFaculties(); 
     } else {
-      alert("Failed to add faculty. Email might already exist.");
+      // 3. Replace the alert
+      showToast("Failed to add faculty. Email might already exist.", "error");
     }
     setIsSubmitting(false);
   };
