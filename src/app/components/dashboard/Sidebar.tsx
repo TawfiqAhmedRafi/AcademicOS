@@ -1,0 +1,131 @@
+"use client";
+
+import Link from "next/link";
+import Image from "next/image";
+import { usePathname } from "next/navigation";
+import { 
+  LayoutDashboard, BookOpen, FileText, GraduationCap, Calendar, 
+  UploadCloud, ShieldAlert, Users, CheckSquare, Network, BarChart3, 
+  Database, UserCog, LogOut, Briefcase
+} from "lucide-react";
+import { signOut } from "next-auth/react";
+
+interface SidebarProps {
+  user: any;
+  onClose?: () => void; // For mobile menu closing
+}
+
+export default function Sidebar({ user, onClose }: SidebarProps) {
+  const pathname = usePathname();
+
+  // Navigation Arrays based on Role
+  const studentLinks = [
+    { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Course Registration", href: "/dashboard/registration", icon: BookOpen },
+    { name: "Form Fill-up", href: "/dashboard/form-fillup", icon: FileText },
+    { name: "Academic Results", href: "/dashboard/results", icon: GraduationCap },
+    { name: "Class Routine", href: "/dashboard/routine", icon: Calendar },
+  ];
+
+  const facultyBaseLinks = [
+    { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
+    { name: "My Classes", href: "/dashboard/classes", icon: Briefcase },
+    { name: "Upload Marks", href: "/dashboard/marks", icon: UploadCloud },
+    { name: "Similarity Checks", href: "/dashboard/similarity", icon: ShieldAlert },
+  ];
+
+  const advisorLinks = [
+    { name: "Series Roster", href: "/dashboard/roster", icon: Users },
+    { name: "Pending Approvals", href: "/dashboard/approvals", icon: CheckSquare },
+  ];
+
+  const deptHeadLinks = [
+    { name: "Series Manager", href: "/dashboard/series-manager", icon: Network },
+    { name: "Dept Analytics", href: "/dashboard/analytics", icon: BarChart3 },
+  ];
+
+  const adminLinks = [
+    { name: "System Overview", href: "/dashboard", icon: Database },
+    { name: "Faculty Management", href: "/dashboard/faculty-mgmt", icon: UserCog },
+  ];
+
+  // Helper to render link blocks
+  const renderLinks = (links: any[], title?: string) => (
+    <div className="mb-6">
+      {title && <p className="mb-3 px-4 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{title}</p>}
+      <div className="space-y-1">
+        {links.map((link) => {
+          const isActive = pathname === link.href;
+          return (
+            <Link 
+              key={link.name} 
+              href={link.href}
+              onClick={onClose}
+              className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all ${
+                isActive 
+                  ? "bg-ruet-blue text-white shadow-md dark:bg-ruet-gold dark:text-black" 
+                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"
+              }`}
+            >
+              <link.icon size={18} className={isActive ? "text-white dark:text-black" : "text-slate-400"} />
+              {link.name}
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex h-full flex-col justify-between border-r border-slate-200 bg-white/60 backdrop-blur-xl dark:border-white/10 dark:bg-[#0f172a]/60">
+      <div className="flex-1 overflow-y-auto px-4 py-6 custom-scrollbar">
+        {/* Brand */}
+        <div className="mb-10 px-2 flex items-center gap-3">
+          <Image src="/logo.png" alt="Logo" width={36} height={36} className="object-contain" />
+          <div>
+            <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Academic <span className="text-ruet-gold">OS</span></h2>
+          </div>
+        </div>
+
+        {/* Stacked RBAC Links */}
+        {user.role === "student" && renderLinks(studentLinks)}
+        
+        {user.role === "faculty" && (
+          <>
+            {renderLinks(facultyBaseLinks, "Faculty Menu")}
+            {/* If they are also an advisor (You can check a specific flag here later) */}
+            {renderLinks(advisorLinks, "Advisor Tools")}
+          </>
+        )}
+
+        {user.role === "dept_head" && (
+          <>
+            {renderLinks(facultyBaseLinks, "Faculty Menu")}
+            {renderLinks(deptHeadLinks, "Head Tools")}
+          </>
+        )}
+
+        {user.role === "admin" && renderLinks(adminLinks, "Admin Panel")}
+      </div>
+
+      {/* User Profile Footer */}
+      <div className="border-t border-slate-200 p-4 dark:border-white/10">
+        <div className="mb-4 flex items-center gap-3 rounded-xl bg-white/50 p-3 shadow-sm dark:bg-black/20">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-slate-200 font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+            {user.name?.charAt(0) || "U"}
+          </div>
+          <div className="flex flex-col overflow-hidden">
+            <span className="truncate text-sm font-bold text-slate-900 dark:text-white">{user.name}</span>
+            <span className="truncate text-xs font-medium text-slate-500 dark:text-slate-400 capitalize">{user.role.replace('_', ' ')}</span>
+          </div>
+        </div>
+        <button 
+          onClick={() => signOut({ callbackUrl: "/" })}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-50 py-2.5 text-sm font-bold text-red-600 transition-colors hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
+        >
+          <LogOut size={16} /> Logout
+        </button>
+      </div>
+    </div>
+  );
+}
