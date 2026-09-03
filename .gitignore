@@ -28,6 +28,8 @@ AOS_Full_Plan.pdf
 AOS_Website_Plan.pdf
 Ete system.pdf
 ETE Department.xlsx
+ETE25.xlsx
+ETE Syllabus.pdf
 ete-database-schema.pdf
 # debug
 npm-debug.log*
@@ -44,4 +46,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-scripts/seed.ts
+seed.ts
+seed-courses.ts
