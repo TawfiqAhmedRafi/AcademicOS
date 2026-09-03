@@ -50,7 +50,7 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
 
   const deptHeadLinks = [
     { name: "Series Manager", href: "/dashboard/series-manager", icon: Network },
-    { name: "Dept Analytics", href: "/dashboard/analytics", icon: BarChart3 },
+    
   ];
 
   // ADDED NEW ADMIN LINKS HERE
