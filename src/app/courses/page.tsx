@@ -1,25 +1,25 @@
 import clientPromise from "@/lib/mongodb";
 import CourseCatalog from "./CourseCatalog";
 import Navbar from "../components/Navbar";
+import Footer from "../components/Footer";
 
-export const dynamic = "force-dynamic"; // Ensures fresh data if courses are updated
+export const dynamic = "force-dynamic";
 
 export default async function CoursesPage() {
   const client = await clientPromise;
   const db = client.db("academicos");
   
-  // Fetch all courses and sort them alphanumerically by course code
+  // Requirement 1: Fetch serially by semester FIRST, then by course code
   const courses = await db.collection("courses")
     .find({})
-    .sort({ courseCode: 1 })
+    .sort({ semester: 1, courseCode: 1 }) 
     .toArray();
 
-  // Convert MongoDB ObjectId to a standard string for the Client Component
   const serializedCourses = courses.map((c) => ({
     _id: c._id.toString(),
     courseCode: c.courseCode,
     title: c.title,
-    semester: c.semester || c.level, // Handling both naming conventions
+    semester: c.semester || c.level, 
     credits: c.credits,
     creditHours: c.creditHours || c.contactHours, 
     isSessional: c.isSessional,
@@ -31,8 +31,7 @@ export default async function CoursesPage() {
 
   return (
     <div className="relative flex min-h-screen flex-col selection:bg-ruet-gold selection:text-black dark:bg-[#020617]">
-        <Navbar />
-      {/* Cinematic Ambient Lighting */}
+        <Navbar/>
       <div className="fixed top-1/4 left-0 -z-10 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-ruet-blue/20 blur-[150px] dark:bg-ruet-blue/20"></div>
       <div className="fixed bottom-1/4 right-0 -z-10 h-[400px] w-[400px] translate-x-1/3 rounded-full bg-ruet-gold/10 blur-[120px] dark:bg-ruet-gold/10"></div>
       
@@ -50,6 +49,7 @@ export default async function CoursesPage() {
           <CourseCatalog initialCourses={serializedCourses} />
         </div>
       </main>
+      <Footer/>
     </div>
   );
 }
