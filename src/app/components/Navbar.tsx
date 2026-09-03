@@ -46,7 +46,7 @@ export default function Navbar() {
           <div className="hidden lg:block">
             <div className="flex items-center space-x-8">
               <Link href="/" className="text-sm font-medium text-slate-900 transition-colors hover:text-ruet-blue dark:text-slate-300 dark:hover:text-ruet-gold">Home</Link>
-              <Link href="/modules" className="text-sm font-medium text-slate-900 transition-colors hover:text-ruet-blue dark:text-slate-300 dark:hover:text-ruet-gold">All Modules</Link>
+              <Link href="/courses" className="text-sm font-medium text-slate-900 transition-colors hover:text-ruet-blue dark:text-slate-300 dark:hover:text-ruet-gold">All courses</Link>
               <Link href="/match" className="text-sm font-medium text-slate-900 transition-colors hover:text-ruet-blue dark:text-slate-300 dark:hover:text-ruet-gold">Match Project</Link>
               <Link href="/notice" className="text-sm font-medium text-slate-900 transition-colors hover:text-ruet-blue dark:text-slate-300 dark:hover:text-ruet-gold">All Notices</Link>
               <Link href="/routine" className="text-sm font-medium text-slate-900 transition-colors hover:text-ruet-blue dark:text-slate-300 dark:hover:text-ruet-gold">Routine</Link>
@@ -146,7 +146,7 @@ export default function Navbar() {
         <div className="glass-panel border-t border-white/10 lg:hidden">
           <div className="flex flex-col space-y-2 px-4 pb-6 pt-4">
             <Link href="/" className="block rounded-lg px-4 py-3 text-base font-medium text-slate-900 hover:bg-white/5 dark:text-white">Home</Link>
-            <Link href="/modules" className="block rounded-lg px-4 py-3 text-base font-medium text-slate-900 hover:bg-white/5 dark:text-white">All Modules</Link>
+            <Link href="/courses" className="block rounded-lg px-4 py-3 text-base font-medium text-slate-900 hover:bg-white/5 dark:text-white">All courses</Link>
             <Link href="/match" className="block rounded-lg px-4 py-3 text-base font-medium text-slate-900 hover:bg-white/5 dark:text-white">Match Project</Link>
             <Link href="/notice" className="block rounded-lg px-4 py-3 text-base font-medium text-slate-900 hover:bg-white/5 dark:text-white">All Notices</Link>
             <Link href="/routine" className="block rounded-lg px-4 py-3 text-base font-medium text-slate-900 hover:bg-white/5 dark:text-white">Routine</Link>
