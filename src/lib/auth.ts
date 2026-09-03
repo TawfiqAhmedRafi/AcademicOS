@@ -102,6 +102,7 @@ export const authOptions: NextAuthOptions = {
                 session.user.role = token.role as string;
                 session.user.series = token.series as string;
                 session.user.department = token.department as string;
+                session.user.image = token.picture as string;
             }
             return session;
         },

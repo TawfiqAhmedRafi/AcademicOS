@@ -1,12 +1,14 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { useTheme } from "next-themes";
 import { 
   LayoutDashboard, BookOpen, FileText, GraduationCap, Calendar, 
   UploadCloud, ShieldAlert, Users, CheckSquare, Network, BarChart3, 
-  Database, UserCog, LogOut, Briefcase
+  Database, UserCog, LogOut, Briefcase, Sun, Moon
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -17,6 +19,13 @@ interface SidebarProps {
 
 export default function Sidebar({ user, onClose }: SidebarProps) {
   const pathname = usePathname();
+  
+  // Theme state
+  const { theme, setTheme, systemTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  
+  useEffect(() => setMounted(true), []);
+  const currentTheme = theme === "system" ? systemTheme : theme;
 
   // Navigation Arrays based on Role
   const studentLinks = [
@@ -44,9 +53,12 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
     { name: "Dept Analytics", href: "/dashboard/analytics", icon: BarChart3 },
   ];
 
+  // ADDED NEW ADMIN LINKS HERE
   const adminLinks = [
-    { name: "System Overview", href: "/dashboard", icon: Database },
+    { name: "System Overview", href: "/dashboard", icon: LayoutDashboard },
     { name: "Faculty Management", href: "/dashboard/faculty-mgmt", icon: UserCog },
+    { name: "User Management", href: "/dashboard/user-mgmt", icon: ShieldAlert },
+    { name: "System Logs", href: "/dashboard/logs", icon: Database },
   ];
 
   // Helper to render link blocks
@@ -79,12 +91,28 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
   return (
     <div className="flex h-full flex-col justify-between border-r border-slate-200 bg-white/60 backdrop-blur-xl dark:border-white/10 dark:bg-[#0f172a]/60">
       <div className="flex-1 overflow-y-auto px-4 py-6 custom-scrollbar">
-        {/* Brand */}
-        <div className="mb-10 px-2 flex items-center gap-3">
-          <Image src="/logo.png" alt="Logo" width={36} height={36} className="object-contain" />
-          <div>
-            <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Academic <span className="text-ruet-gold">OS</span></h2>
-          </div>
+        
+        {/* Brand & Theme Toggler */}
+        <div className="mb-10 px-2 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-3 group">
+            <Image src="/logo.png" alt="Logo" width={36} height={36} className="object-contain transition-transform group-hover:scale-105" />
+            <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+              Academic <span className="text-ruet-gold">OS</span>
+            </h2>
+          </Link>
+
+          {/* Theme Toggler inside Sidebar */}
+          {mounted ? (
+            <button 
+              onClick={() => setTheme(currentTheme === "dark" ? "light" : "dark")}
+              className="rounded-full p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-ruet-gold dark:text-slate-400 dark:hover:bg-white/5"
+              aria-label="Toggle Dark Mode"
+            >
+              {currentTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+          ) : (
+            <div className="h-9 w-9" />
+          )}
         </div>
 
         {/* Stacked RBAC Links */}
@@ -93,7 +121,6 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
         {user.role === "faculty" && (
           <>
             {renderLinks(facultyBaseLinks, "Faculty Menu")}
-            {/* If they are also an advisor (You can check a specific flag here later) */}
             {renderLinks(advisorLinks, "Advisor Tools")}
           </>
         )}
@@ -111,12 +138,27 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
       {/* User Profile Footer */}
       <div className="border-t border-slate-200 p-4 dark:border-white/10">
         <div className="mb-4 flex items-center gap-3 rounded-xl bg-white/50 p-3 shadow-sm dark:bg-black/20">
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-slate-200 font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-            {user.name?.charAt(0) || "U"}
-          </div>
+          
+          {/* Profile Image with Alphabet Fallback */}
+          {user.image ? (
+            <Image 
+              src={user.image} 
+              alt={user.name || "Profile"} 
+              width={40} 
+              height={40} 
+              className="h-10 w-10 flex-shrink-0 rounded-full object-cover ring-2 ring-white dark:ring-[#0f172a]" 
+            />
+          ) : (
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-slate-200 font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+              {user.name?.charAt(0) || "U"}
+            </div>
+          )}
+
           <div className="flex flex-col overflow-hidden">
             <span className="truncate text-sm font-bold text-slate-900 dark:text-white">{user.name}</span>
-            <span className="truncate text-xs font-medium text-slate-500 dark:text-slate-400 capitalize">{user.role.replace('_', ' ')}</span>
+            <span className="truncate text-xs font-medium text-slate-500 dark:text-slate-400 capitalize">
+              {user.role === 'advisor' ? 'Faculty' : user.role.replace('_', ' ')}
+            </span>
           </div>
         </div>
         <button 
