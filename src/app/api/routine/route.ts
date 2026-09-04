@@ -78,3 +78,26 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: "Failed to delete slot" }, { status: 500 });
   }
 }
+// PUT: Update an existing slot
+export async function PUT(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (session?.user?.role !== "dept_head") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+
+  try {
+    const data = await req.json();
+    const { _id, ...updateData } = data;
+    
+    const client = await clientPromise;
+    const db = client.db("academicos");
+
+    await db.collection("routine_slots").updateOne(
+      { _id: new ObjectId(_id) },
+      { $set: { ...updateData, series: Number(updateData.series), updatedAt: new Date() } }
+    );
+
+    await logSystemAction("Routine Slot Updated", "System", `Slot updated for ${updateData.courseCode}`);
+    return NextResponse.json({ message: "Slot updated" }, { status: 200 });
+  } catch (error) {
+    return NextResponse.json({ error: "Failed to update slot" }, { status: 500 });
+  }
+}

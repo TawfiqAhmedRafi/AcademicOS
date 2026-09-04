@@ -1,56 +1,62 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Loader2, Plus, Calendar, Clock, MapPin, Users } from "lucide-react";
+import { Loader2, Plus, Calendar, Clock, MapPin, Users, X, Save, Trash2, AlertCircle } from "lucide-react";
 import { useToast } from "@/app/components/ToastProvider";
+import DropdownFilter from "@/app/components/DropdownFilter";
+import Swal from "sweetalert2";
 
-// Extracted from your constants.js
 const DAYS = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday"];
 const TIME_PERIODS = [
-  { period: 1, start: "8:00", end: "8:50" },
-  { period: 2, start: "8:50", end: "9:40" },
-  { period: 3, start: "9:40", end: "10:30" },
-  { period: "BREAK", start: "10:30", end: "10:50", isBreak: true, label: "Break" },
-  { period: 4, start: "10:50", end: "11:40" },
-  { period: 5, start: "11:40", end: "12:30" },
-  { period: 6, start: "12:30", end: "1:20" },
-  { period: "PLB", start: "1:20", end: "2:30", isBreak: true, label: "P&LB" },
-  { period: 7, start: "2:30", end: "3:20" },
-  { period: 8, start: "3:20", end: "4:10" },
+  { period: 1, start: "8:00", end: "8:50" }, { period: 2, start: "8:50", end: "9:40" },
+  { period: 3, start: "9:40", end: "10:30" }, { period: "BREAK", start: "10:30", end: "10:50", isBreak: true, label: "Break" },
+  { period: 4, start: "10:50", end: "11:40" }, { period: 5, start: "11:40", end: "12:30" },
+  { period: 6, start: "12:30", end: "1:20" }, { period: "PLB", start: "1:20", end: "2:30", isBreak: true, label: "P&LB" },
+  { period: 7, start: "2:30", end: "3:20" }, { period: 8, start: "3:20", end: "4:10" },
   { period: 9, start: "4:10", end: "5:00" },
 ];
 const NUM_PERIODS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
+const ROOMS = ["301", "302", "303", "304", "Seminar", "DSP Lab", "Electronics Lab", "Communication Lab", "Antenna Lab", "Computer Lab", "Machine Lab"];
+const TYPES = ["theory", "lab", "project", "thesis", "seminar"];
+const SPAN3_TYPES = ['lab', 'project', 'seminar', 'thesis'];
+
 export default function RoutineBuilderPage() {
   const [configs, setConfigs] = useState<any[]>([]);
   const [slots, setSlots] = useState<any[]>([]);
+  const [teachers, setTeachers] = useState<any[]>([]);
   const [activeSeries, setActiveSeries] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  
+  const [editorModal, setEditorModal] = useState<{ isNew: boolean, data: any } | null>(null);
   const { showToast } = useToast();
 
   const fetchData = async () => {
     setIsLoading(true);
-    const res = await fetch("/api/routine");
-    if (res.ok) {
-      const data = await res.json();
+    const [routineRes, facultyRes] = await Promise.all([
+      fetch("/api/routine"),
+      fetch("/api/head/faculty-list")
+    ]);
+
+    if (routineRes.ok) {
+      const data = await routineRes.json();
       setConfigs(data.seriesConfigs);
       setSlots(data.slots);
       if (data.seriesConfigs.length > 0 && !activeSeries) {
         setActiveSeries(Number(data.seriesConfigs[0].series));
       }
     }
+    if (facultyRes.ok) {
+      setTeachers(await facultyRes.json());
+    }
     setIsLoading(false);
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
-  // Filter slots for the currently selected series tab
   const activeSlots = slots.filter(s => s.series === activeSeries);
   const activeConfig = configs.find(c => Number(c.series) === activeSeries);
 
-  // Your exact buildGrid logic[cite: 4]
   const grid = useMemo(() => {
     const g: any = {};
     DAYS.forEach(d => { g[d] = {}; NUM_PERIODS.forEach(p => { g[d][p] = null; }); });
@@ -68,24 +74,58 @@ export default function RoutineBuilderPage() {
   }, [activeSlots]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this routine slot?")) return;
+    const result = await Swal.fire({
+      title: "Delete this class?",
+      text: "This class slot will be permanently removed from the routine.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Delete",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#64748b",
+      reverseButtons: true,
+      background: document.documentElement.classList.contains("dark") ? "#0f172a" : "#ffffff",
+      color: document.documentElement.classList.contains("dark") ? "#e2e8f0" : "#0f172a",
+    });
+
+    if (!result.isConfirmed) return;
+
     const res = await fetch(`/api/routine?id=${id}`, { method: "DELETE" });
     if (res.ok) {
       showToast("Slot deleted", "success");
+      setEditorModal(null);
       fetchData();
+    } else {
+      showToast("Failed to delete slot", "error");
     }
   };
 
-  if (isLoading) return <div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin text-ruet-blue" size={32} /></div>;
+  const handleSaveSlot = async (payload: any) => {
+    const method = editorModal?.isNew ? "POST" : "PUT";
+    const res = await fetch("/api/routine", {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, series: activeSeries, semester: activeConfig?.currentSemester })
+    });
+
+    if (res.ok) {
+      showToast(editorModal?.isNew ? "Slot created" : "Slot updated", "success");
+      setEditorModal(null);
+      fetchData();
+    } else {
+      showToast("Failed to save slot", "error");
+    }
+  };
+
+  if (isLoading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="animate-spin text-ruet-blue" size={32} /></div>;
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       <div className="mb-8">
         <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white">Routine Builder</h1>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Manage schedules for current active semesters.</p>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Click an empty cell to add a class, or click an existing class to edit.</p>
       </div>
 
-      {/* Series Tabs */}
       <div className="flex gap-2 overflow-x-auto pb-4 mb-4 custom-scrollbar">
         {configs.sort((a,b) => Number(b.series) - Number(a.series)).map(cfg => (
           <button
@@ -102,11 +142,10 @@ export default function RoutineBuilderPage() {
         ))}
       </div>
 
-      {/* The Grid[cite: 4] */}
       {activeSeries && activeConfig && (
         <div className="glass-panel overflow-hidden rounded-3xl animate-in fade-in duration-300">
           <div className="overflow-x-auto custom-scrollbar p-1">
-            <table className="w-full text-left text-sm min-w-[800px] table-fixed">
+            <table className="w-full text-left text-sm min-w-[900px] table-fixed">
               <thead className="bg-slate-50/50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
                 <tr>
                   <th className="w-20 px-4 py-4 font-semibold text-slate-600 dark:text-slate-300">DAY</th>
@@ -134,14 +173,27 @@ export default function RoutineBuilderPage() {
                         return (
                           <td key={tp.period} colSpan={colSpan} className="p-1 border-l border-slate-200 dark:border-white/10">
                             {slot ? (
-                              <div className="group relative w-full h-16 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-lg p-2 flex flex-col justify-center">
-                                <span className="font-bold text-emerald-800 dark:text-emerald-400 text-xs truncate">{slot.courseCode}</span>
-                                <span className="text-[10px] text-emerald-600 dark:text-emerald-500 truncate">{slot.teachers?.join(', ')}</span>
-                                <button onClick={() => handleDelete(slot._id)} className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700">×</button>
-                              </div>
+                              <button 
+                                onClick={() => setEditorModal({ isNew: false, data: slot })}
+                                className="group relative w-full min-h-[4.5rem] bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-lg p-2 flex flex-col justify-between hover:shadow-md transition-all text-left"
+                              >
+                                <div className="flex justify-end w-full">
+                                  <span className="text-[8px] font-bold text-emerald-600 dark:text-emerald-400 uppercase bg-emerald-100 dark:bg-emerald-900/40 px-1.5 py-0.5 rounded leading-none">{slot.type}</span>
+                                </div>
+                                <div className="font-black text-emerald-900 dark:text-emerald-300 text-[11px] sm:text-xs leading-tight w-full my-0.5">
+                                  {slot.courseCode}
+                                </div>
+                                <div className="flex justify-between items-end w-full">
+                                  <span className="text-[9px] font-semibold text-emerald-700 dark:text-emerald-500">{slot.teachers?.join(', ')}</span>
+                                  {slot.room && <span className="text-[9px] text-emerald-600 dark:text-emerald-500 font-medium ml-2">{slot.room}</span>}
+                                </div>
+                              </button>
                             ) : (
-                              <button className="w-full h-16 border border-dashed border-slate-300 dark:border-slate-700 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                                <Plus size={16} />
+                              <button 
+                                onClick={() => setEditorModal({ isNew: true, data: { day, startPeriod: tp.period, type: 'theory', periodSpan: 1 } })}
+                                className="w-full min-h-[4.5rem] border border-dashed border-slate-300 dark:border-slate-700 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+                              >
+                                <Plus size={18} />
                               </button>
                             )}
                           </td>
@@ -155,6 +207,237 @@ export default function RoutineBuilderPage() {
           </div>
         </div>
       )}
+
+      {editorModal && (
+        <SlotEditorModal 
+          modal={editorModal} 
+          allMasterSlots={slots} 
+          allTeachers={teachers} 
+          onClose={() => setEditorModal(null)} 
+          onSave={handleSaveSlot} 
+          onDelete={handleDelete} 
+        />
+      )}
+    </div>
+  );
+}
+
+// --- INTERNAL MODAL COMPONENT ---
+function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, onDelete }: any) {
+  const isNew = modal.isNew;
+  const init = modal.data;
+
+  const [form, setForm] = useState({
+    courseCode: init.courseCode || '',
+    courseName: init.courseName || '',
+    type: init.type || 'theory',
+    day: init.day,
+    startPeriod: init.startPeriod,
+    periodSpan: init.periodSpan || 1,
+    room: init.room || '', // Could be comma-separated if XX
+    teachers: init.teachers || [],
+    batchScope: init.batchScope || 'all'
+  });
+
+  // Calculate Busy Status for Collision Detection
+  const { busyRooms, busyTeachers } = useMemo(() => {
+    const occupiedRooms = new Set<string>();
+    const occupiedTeachers = new Set<string>();
+    const requestedPeriods = Array.from({ length: Number(form.periodSpan) }, (_, i) => Number(form.startPeriod) + i);
+
+    allMasterSlots.forEach((slot: any) => {
+      if (!isNew && slot._id === init._id) return; // Don't collide with itself
+      if (slot.day !== form.day) return;
+
+      const slotSpan = slot.periodSpan || 1;
+      const existingPeriods = Array.from({ length: slotSpan }, (_, i) => slot.startPeriod + i);
+      
+      const hasTimeOverlap = requestedPeriods.some(p => existingPeriods.includes(p));
+      if (hasTimeOverlap) {
+        if (slot.room && slot.room !== "N/A") {
+          slot.room.split(',').forEach((r: string) => occupiedRooms.add(r.trim()));
+        }
+        (slot.teachers || []).forEach((t: string) => {
+          if (t !== "N/A") occupiedTeachers.add(t);
+        });
+      }
+    });
+    return { busyRooms: occupiedRooms, busyTeachers: occupiedTeachers };
+  }, [form.day, form.startPeriod, form.periodSpan, allMasterSlots, init._id, isNew]);
+
+  // Handle Type Change -> Auto Span
+  useEffect(() => {
+    const newSpan = SPAN3_TYPES.includes(form.type) ? 3 : 1;
+    setForm(prev => ({ ...prev, periodSpan: newSpan }));
+  }, [form.type]);
+
+  // Is Multiple Room Allowed?
+  const isMultiRoom = form.courseCode.includes("XX");
+
+  const handleRoomToggle = (r: string) => {
+    if (busyRooms.has(r)) return;
+    
+    if (isMultiRoom) {
+      let currentRooms = form.room ? form.room.split(',').map((x: string) => x.trim()) : [];
+      if (currentRooms.includes(r)) {
+        currentRooms = currentRooms.filter((x: string) => x !== r);
+      } else {
+        currentRooms.push(r);
+      }
+      setForm({ ...form, room: currentRooms.join(', ') });
+    } else {
+      setForm({ ...form, room: r });
+    }
+  };
+
+  const handleTeacherToggle = (t: string) => {
+    if (busyTeachers.has(t)) return;
+    let current = [...form.teachers];
+    if (current.includes(t)) {
+      current = current.filter((x: string) => x !== t);
+    } else {
+      current.push(t);
+    }
+    setForm({ ...form, teachers: current });
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave({
+      ...init,
+      ...form,
+      startPeriod: Number(form.startPeriod),
+      periodSpan: Number(form.periodSpan)
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm dark:bg-black/60 p-4 animate-in fade-in">
+      <div className="glass-panel w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl dark:bg-[#0f172a] max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">{isNew ? "Add Class Slot" : "Edit Class Slot"}</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-white"><X size={20} /></button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase">Course Code</label>
+              <input required value={form.courseCode} onChange={e => setForm({...form, courseCode: e.target.value.toUpperCase()})} placeholder="ETE 32XX" className="w-full mt-1 rounded-xl border border-slate-300 bg-white/50 px-4 py-2.5 text-sm focus:border-ruet-blue focus:outline-none dark:border-white/10 dark:bg-black/20 dark:text-white" />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase">Type</label>
+              <div className="mt-1">
+                <DropdownFilter
+                  fullWidth
+                  value={form.type}
+                  onChange={(val) => setForm({ ...form, type: val })}
+                  options={TYPES.map(t => ({ label: t.charAt(0).toUpperCase() + t.slice(1), value: t }))}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase">Day</label>
+              <div className="mt-1">
+                <DropdownFilter
+                  fullWidth
+                  value={form.day}
+                  onChange={(val) => setForm({ ...form, day: val })}
+                  options={DAYS.map(d => ({ label: d.substring(0, 3), value: d }))}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase">Start Period</label>
+              <div className="mt-1">
+                <DropdownFilter
+                  fullWidth
+                  value={String(form.startPeriod)}
+                  onChange={(val) => setForm({ ...form, startPeriod: Number(val) })}
+                  options={NUM_PERIODS.map(p => ({ label: `P${p}`, value: String(p) }))}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase">Duration</label>
+              <div className="mt-1">
+                <DropdownFilter
+                  fullWidth
+                  value={String(form.periodSpan)}
+                  onChange={(val) => setForm({ ...form, periodSpan: Number(val) })}
+                  options={[1, 2, 3].map(p => ({ label: `${p} hr`, value: String(p) }))}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ROOM SELECTOR: Detects "XX" in Course Code for Multiple Selection */}
+          <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-xl border border-slate-200 dark:border-white/10">
+            <div className="flex justify-between items-center mb-2">
+              <label className="text-xs font-bold text-slate-500 uppercase">Assign Room {isMultiRoom ? "(Multiple)" : ""}</label>
+              {isMultiRoom && <span className="text-[10px] bg-ruet-blue/10 text-ruet-blue px-2 py-0.5 rounded font-bold dark:bg-ruet-gold/10 dark:text-ruet-gold">"XX" Detected</span>}
+            </div>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {ROOMS.map(r => {
+                const isBusy = busyRooms.has(r);
+                const isSelected = isMultiRoom ? form.room?.includes(r) : form.room === r;
+                return (
+                  <button
+                    key={r} type="button" onClick={() => handleRoomToggle(r)} disabled={isBusy}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all border ${
+                      isBusy ? "bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700 cursor-not-allowed" 
+                      : isSelected ? "bg-ruet-blue text-white border-ruet-blue dark:bg-ruet-gold dark:text-black dark:border-ruet-gold shadow-md"
+                      : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50 dark:bg-black/20 dark:border-white/10 dark:text-slate-300"
+                    }`}
+                  >
+                    {r} {isBusy && <span className="ml-1 text-[9px] opacity-70">(Busy)</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* TEACHER SELECTOR */}
+          <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-xl border border-slate-200 dark:border-white/10">
+            <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Assign Teachers</label>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {allTeachers.map((t: any) => { // FIXED: Changed teachers to allTeachers here
+                const init = t.initials;
+                if(!init) return null;
+                const isBusy = busyTeachers.has(init);
+                const isSelected = form.teachers.includes(init);
+                return (
+                  <button
+                    key={init} type="button" onClick={() => handleTeacherToggle(init)} disabled={isBusy}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all border ${
+                      isBusy ? "bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700 cursor-not-allowed" 
+                      : isSelected ? "bg-emerald-500 text-white border-emerald-500 dark:bg-emerald-500 dark:text-black dark:border-emerald-500 shadow-md"
+                      : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50 dark:bg-black/20 dark:border-white/10 dark:text-slate-300"
+                    }`}
+                  >
+                    {init} {isBusy && <span className="ml-1 text-[9px] opacity-70">(Busy)</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            {!isNew && (
+              <button type="button" onClick={() => onDelete(init._id)} className="flex-1 bg-red-50 text-red-600 font-bold py-3 rounded-xl border border-red-200 hover:bg-red-100 dark:bg-red-500/10 dark:border-red-500/20 dark:hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2">
+                <Trash2 size={18}/> Delete
+              </button>
+            )}
+            <button type="submit" className="flex-[2] bg-ruet-blue text-white font-bold py-3 rounded-xl hover:bg-blue-900 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400 transition-colors flex items-center justify-center gap-2 shadow-lg">
+              <Save size={18}/> Save Slot
+            </button>
+          </div>
+
+        </form>
+      </div>
     </div>
   );
 }

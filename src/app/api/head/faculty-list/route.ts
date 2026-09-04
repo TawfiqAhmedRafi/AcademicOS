@@ -5,6 +5,7 @@ import clientPromise from "@/lib/mongodb";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
+  
   if (session?.user?.role !== "dept_head" && session?.user?.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
@@ -13,10 +14,11 @@ export async function GET() {
     const client = await clientPromise;
     const db = client.db("academicos");
     
-    // Fetch all active faculty members to populate the Advisor assignment dropdown
+    // Fetch all active faculty members
     const faculty = await db.collection("users")
       .find({ role: { $in: ["faculty", "advisor", "dept_head"] } })
-      .project({ name: 1, email: 1, designation: 1 })
+      // FIX: Added 'initials: 1' to the projection below so the Routine Builder can see them!
+      .project({ name: 1, email: 1, designation: 1, initials: 1 }) 
       .sort({ name: 1 })
       .toArray();
 

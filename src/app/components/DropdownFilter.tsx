@@ -13,9 +13,12 @@ interface DropdownFilterProps {
   value: string;
   onChange: (val: string) => void;
   icon?: ReactNode;
+  /** When true, the trigger fills its container instead of enforcing a 180px
+   *  min-width. Use this inside tight grid cells (e.g. a 2 or 3 column form row). */
+  fullWidth?: boolean;
 }
 
-export default function DropdownFilter({ options, value, onChange, icon }: DropdownFilterProps) {
+export default function DropdownFilter({ options, value, onChange, icon, fullWidth = false }: DropdownFilterProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -33,24 +36,26 @@ export default function DropdownFilter({ options, value, onChange, icon }: Dropd
   }, []);
 
   return (
-    <div className="relative w-full sm:w-auto" ref={dropdownRef}>
+    <div className={`relative ${fullWidth ? "w-full" : "w-full sm:w-auto"}`} ref={dropdownRef}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full min-w-[180px] items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white/50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm backdrop-blur-md transition-all hover:bg-white/80 focus:border-ruet-blue focus:outline-none focus:ring-1 focus:ring-ruet-blue dark:border-white/10 dark:bg-black/20 dark:text-slate-200 dark:hover:bg-white/5 dark:focus:border-ruet-gold dark:focus:ring-ruet-gold sm:py-2.5"
+        className={`flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white/50 px-3 py-2.5 text-sm font-medium text-slate-700 shadow-sm backdrop-blur-md transition-all hover:bg-white/80 focus:border-ruet-blue focus:outline-none focus:ring-1 focus:ring-ruet-blue dark:border-white/10 dark:bg-black/20 dark:text-slate-200 dark:hover:bg-white/5 dark:focus:border-ruet-gold dark:focus:ring-ruet-gold ${
+          fullWidth ? "" : "min-w-[180px] sm:py-2.5"
+        }`}
       >
-        <div className="flex items-center gap-2">
-          {icon && <span className="text-slate-400">{icon}</span>}
-          <span>{selectedOption.label}</span>
+        <div className="flex min-w-0 items-center gap-2">
+          {icon && <span className="shrink-0 text-slate-400">{icon}</span>}
+          <span className="truncate">{selectedOption.label}</span>
         </div>
-        <ChevronDown 
-          size={16} 
-          className={`text-slate-400 transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`} 
+        <ChevronDown
+          size={16}
+          className={`shrink-0 text-slate-400 transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}
         />
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full z-50 mt-2 w-full min-w-[180px] animate-in fade-in slide-in-from-top-2 overflow-hidden rounded-xl border border-slate-200 bg-white/90 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-[#0f172a]/95">
+        <div className="absolute left-0 top-full z-50 mt-2 w-full min-w-[140px] animate-in fade-in slide-in-from-top-2 overflow-hidden rounded-xl border border-slate-200 bg-white/90 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-[#0f172a]/95">
           <ul className="max-h-60 overflow-y-auto py-1">
             {options.map((option) => (
               <li key={option.value}>
@@ -61,8 +66,8 @@ export default function DropdownFilter({ options, value, onChange, icon }: Dropd
                     setIsOpen(false);
                   }}
                   className={`flex w-full items-center px-4 py-2.5 text-left text-sm transition-colors hover:bg-slate-100 dark:hover:bg-white/10 ${
-                    value === option.value 
-                      ? "bg-ruet-blue/5 font-bold text-ruet-blue dark:bg-ruet-gold/10 dark:text-ruet-gold" 
+                    value === option.value
+                      ? "bg-ruet-blue/5 font-bold text-ruet-blue dark:bg-ruet-gold/10 dark:text-ruet-gold"
                       : "text-slate-700 dark:text-slate-300"
                   }`}
                 >
