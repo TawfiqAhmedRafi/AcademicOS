@@ -53,6 +53,9 @@ function renderCell(slot: any): string {
 function renderDayGroupTable(days: string[], configs: any[], slots: any[]): string {
   const dayHeaderCells = days.map((d) => `<th colspan="9" class="day-head">${escapeHtml(d)}</th>`).join("");
   const periodHeaderCells = days.map(() => NUM_PERIODS.map((p) => `<th class="period-head">${p}</th>`).join("")).join("");
+  
+  // Create strict columns for perfect alignment
+  const cols = `<col style="width:68pt;" />` + days.map(() => NUM_PERIODS.map(() => `<col style="width:33.33pt;" />`).join("")).join("");
 
   const rows = configs.map((cfg) => {
       const seriesSlots = slots.filter((s) => Number(s.series) === Number(cfg.series));
@@ -66,7 +69,8 @@ function renderDayGroupTable(days: string[], configs: any[], slots: any[]): stri
         </tr>`;
     }).join("");
 
-  return `<table class="routine-table">
+  return `<table class="routine-table" style="width: ${68 + (days.length * 300)}pt;">
+      <colgroup>${cols}</colgroup>
       <thead>
         <tr><th class="corner">Day &rarr;</th>${dayHeaderCells}</tr>
         <tr><th class="corner">&rarr;Period</th>${periodHeaderCells}</tr>
@@ -75,7 +79,6 @@ function renderDayGroupTable(days: string[], configs: any[], slots: any[]): stri
     </table>`;
 }
 
-// Helper to sort teachers logically for the sidebar
 function sortTeachers(teachersList: any[]) {
   const designationRank = (t: any) => {
     const role = (t.role || "").toLowerCase();
@@ -88,11 +91,11 @@ function sortTeachers(teachersList: any[]) {
     return 5;
   };
 
-  const SENIORITY_ORDER = ["kamal", "fateha", "aslam", "yeakub", "rakib", "farzana", "hasan", "saif", "sharaf", "nahin", "rubaeat", "rifa", "mahmudul", "rakibul"];
+  const SENIORITY_ORDER = ["kamal", "fateha", "aslam", "yeakub", "rakib", "hasan", "farzana", "saif", "sharaf", "nahin", "rubaeat", "rifa", "mahmudul", "rakibul"];
   const seniorityIndex = (name: string) => {
     const words = (name || "").toLowerCase().replace(/[.,]/g, "").split(/\s+/);
     const idx = SENIORITY_ORDER.findIndex((key) => words.includes(key));
-    return idx === -1 ? SENIORITY_ORDER.length : idx;
+    return idx === -1 ? SENIORITY_ORDER.length : idx; 
   };
 
   return teachersList
@@ -106,7 +109,6 @@ function sortTeachers(teachersList: any[]) {
     });
 }
 
-// Add the teachers array to the function signature
 export async function generateRoutinePdf(configs: any[], slots: any[], teachers: any[]): Promise<Buffer> {
   const sortedConfigs = [...configs].sort((a, b) => Number(b.series) - Number(a.series));
   const seriesHeading = sortedConfigs.map(c => c.series).join(", ") + " Series";
@@ -121,33 +123,46 @@ export async function generateRoutinePdf(configs: any[], slots: any[], teachers:
   <style>
     @page { size: 1008pt 612pt; margin: 0; }
     * { box-sizing: border-box; }
-    body { font-family: "Times New Roman", Times, serif; margin: 0; padding: 18pt 22pt; color: #000; font-size: 8.2pt; background: #fff; }
+    body { font-family: "Times New Roman", Times, serif; margin: 0; padding: 18pt 20pt; color: #000; font-size: 8.2pt; background: #fff; }
+    
     .header { text-align: center; margin-bottom: 8pt; line-height: 1.35; }
     .header .l1 { font-size: 10pt; }
     .header .l2 { font-size: 11pt; }
     .header .l3 { font-size: 11pt; font-weight: bold; }
     .header .l4 { font-size: 10pt; }
-    .header .l5 { font-size: 9.5pt; }
-    table.routine-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 6pt; }
-    table.routine-table th, table.routine-table td { border: 0.75pt solid #000; text-align: center; vertical-align: middle; padding: 1pt 2pt; }
-    th.corner { width: 46pt; font-size: 7.5pt; font-weight: bold; }
-    th.day-head { font-weight: bold; font-size: 8.5pt; padding: 2pt; }
-    th.period-head { font-weight: bold; font-size: 7.5pt; width: 28pt; }
-    td.row-label { font-weight: bold; font-size: 7.3pt; line-height: 1.3; }
-    td.cell { height: 24pt; }
-    td.cell.filled .l1 { font-size: 7.3pt; }
-    td.cell.filled .l2 { font-size: 7.3pt; font-weight: bold; }
-    td.cell.filled .l3 { font-size: 7.3pt; }
-    .bottom-section { display: flex; align-items: flex-start; }
-    .bottom-section .routine-table { flex: 1 1 auto; margin-bottom: 0; }
-    .side-tables { display: flex; flex-direction: column; margin-left: 8pt; }
-    .side-note { text-align: right; font-size: 7.5pt; margin-bottom: 3pt; }
-    .side-row { display: flex; gap: 6pt; }
-    table.side-table { border-collapse: collapse; font-size: 7.6pt; }
-    table.side-table th, table.side-table td { border: 0.75pt solid #000; padding: 1.5pt 4pt; text-align: left; }
+    .header .l5 { font-size: 9pt; }
+    
+    /* Strict Table Geometry */
+    table { border-collapse: collapse; table-layout: fixed; }
+    th, td { border: 0.75pt solid #000; text-align: center; vertical-align: middle; overflow: hidden; }
+    table.routine-table { margin-bottom: 6pt; }
+    
+    /* Fixed Heights and Widths */
+    th.corner { height: 16pt; font-size: 7.5pt; font-weight: bold; }
+    th.day-head { height: 16pt; font-size: 8.5pt; font-weight: bold; padding: 2pt; }
+    th.period-head { height: 14pt; font-size: 7.5pt; font-weight: bold; }
+    
+    td.row-label { height: 36pt; font-size: 7.5pt; font-weight: bold; line-height: 1.25; }
+    td.cell { height: 36pt; padding: 1pt; }
+    
+    /* Text Wrapping & Reduced Font Sizes */
+    td.cell.filled .l1 { font-size: 6pt; line-height: 1.1; word-wrap: break-word; }
+    td.cell.filled .l2 { font-size: 6.5pt; font-weight: bold; line-height: 1.1; margin: 1pt 0; word-wrap: break-word; } 
+    td.cell.filled .l3 { font-size: 6pt; line-height: 1.1; word-wrap: break-word; }
+    
+    /* Bottom Layout Alignment */
+    .bottom-section { display: flex; align-items: flex-start; width: 968pt; }
+    .side-tables { display: flex; flex-direction: column; margin-left: 6pt; width: 294pt; }
+    .side-note { text-align: right; font-size: 7.5pt; margin-bottom: 3pt; padding-right: 2pt; font-weight: bold; }
+    .side-row { display: flex; gap: 6pt; width: 100%; }
+    
+    table.side-table { width: 100%; font-size: 7.5pt; }
+    table.side-table th, table.side-table td { padding: 1.5pt 4pt; text-align: left; height: 12pt; }
     table.side-table thead th { text-align: center; font-weight: bold; }
-    td.t-code { text-align: center; width: 22pt; font-weight: bold; }
-    .footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 16pt; }
+    td.t-code { text-align: center; width: 28pt; font-weight: bold; }
+    
+    /* Footer */
+    .footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 14pt; }
     .footer .note { font-size: 11pt; font-weight: bold; }
     .footer .sign { text-align: center; font-size: 8.5pt; }
     .footer .sign .line { display: block; margin-bottom: 3pt; }
@@ -162,9 +177,12 @@ export async function generateRoutinePdf(configs: any[], slots: any[], teachers:
       <div class="l4">Class Routine for ${escapeHtml(seriesHeading)}</div>
       <div class="l5">Effective from ${escapeHtml(effectiveDate)}</div>
     </div>
+    
     ${renderDayGroupTable(DAY_GROUPS[0], sortedConfigs, slots)}
+    
     <div class="bottom-section">
       ${renderDayGroupTable(DAY_GROUPS[1], sortedConfigs, slots)}
+      
       <div class="side-tables">
         <div class="side-note">P&amp;LB = Prayer &amp; Lunch Break</div>
         <div class="side-row">
@@ -179,6 +197,7 @@ export async function generateRoutinePdf(configs: any[], slots: any[], teachers:
         </div>
       </div>
     </div>
+    
     <div class="footer">
       <div class="note">Note: Please follow this routine strictly<br/>"There will be no further change"</div>
       <div class="sign"><span class="line">Head of the Dept: ____________________</span><span class="name">Prof. Dr. Md. Kamal Hosain</span></div>
@@ -186,17 +205,15 @@ export async function generateRoutinePdf(configs: any[], slots: any[], teachers:
   </body>
   </html>`;
 
- let browser;
+  let browser;
   if (process.env.NODE_ENV === "development") {
-    // Next.js automatically triggers this block when you run 'npm run dev'
     const puppeteer = (await import("puppeteer")).default;
     browser = await puppeteer.launch({ 
       headless: true,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
-      channel: "chrome" // Forces it to use the Google Chrome installed on your PC
+      channel: "chrome" 
     });
   } else {
-    // Vercel automatically triggers this block in production
     const chromium = (await import("@sparticuz/chromium")).default;
     const puppeteerCore = (await import("puppeteer-core")).default;
     browser = await puppeteerCore.launch({
@@ -210,10 +227,9 @@ export async function generateRoutinePdf(configs: any[], slots: any[], teachers:
   try {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "networkidle0" });
+    
     const pdfBytes = await page.pdf({
-      width: "14in", 
-      height: "8.5in", 
-      printBackground: true,
+      width: "14in", height: "8.5in", printBackground: true,
       margin: { top: "0in", right: "0in", bottom: "0in", left: "0in" },
     });
     return Buffer.from(pdfBytes);
