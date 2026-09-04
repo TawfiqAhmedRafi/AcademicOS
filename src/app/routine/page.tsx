@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
-import { Loader2, Calendar } from "lucide-react";
+import { Loader2, Calendar, FileDown } from "lucide-react";
 
 const DAYS = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday"];
 const TIME_PERIODS = [
@@ -25,7 +25,9 @@ export default function MasterRoutinePage() {
   const [configs, setConfigs] = useState<any[]>([]);
   const [slots, setSlots] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
 
+  // Fetch the web view data
   useEffect(() => {
     const fetchRoutine = async () => {
       const res = await fetch("/api/routine");
@@ -38,6 +40,30 @@ export default function MasterRoutinePage() {
     };
     fetchRoutine();
   }, []);
+
+  // Hit the backend PDF generator route
+  const handleDownloadPdf = async () => {
+    setIsExporting(true);
+    try {
+      const res = await fetch("/api/routine/pdf");
+      if (!res.ok) throw new Error("Failed to generate PDF");
+      
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ETE_Master_Routine_${new Date().toISOString().slice(0, 10)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      alert("Couldn't generate the PDF. Please try again.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const buildGrid = (seriesSlots: any[]) => {
     const g: any = {};
@@ -62,13 +88,23 @@ export default function MasterRoutinePage() {
       <main className="flex-1 w-full pt-28 pb-16 px-4 sm:px-6 lg:px-12 2xl:px-24">
         <div className="mx-auto max-w-[1400px]">
           
-          <div className="mb-12 text-center">
-            <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-5xl">
-              Master <span className="text-ruet-blue dark:text-ruet-gold">Routine</span>
-            </h1>
-            <p className="mt-4 text-lg text-slate-600 dark:text-slate-400">
-              Live schedules strictly synced with the active academic semesters.
-            </p>
+          <div className="mb-12 flex flex-col items-center text-center gap-4">
+            <div>
+              <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-5xl">
+                Master <span className="text-ruet-blue dark:text-ruet-gold">Routine</span>
+              </h1>
+              <p className="mt-4 text-lg text-slate-600 dark:text-slate-400">
+                Live schedules strictly synced with the active academic semesters.
+              </p>
+            </div>
+            <button
+              onClick={handleDownloadPdf}
+              disabled={isExporting || isLoading}
+              className="inline-flex items-center gap-2 rounded-full bg-ruet-blue dark:bg-ruet-gold px-5 py-2.5 text-sm font-bold text-white dark:text-black shadow-lg transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isExporting ? <Loader2 className="animate-spin" size={16} /> : <FileDown size={16} />}
+              {isExporting ? "Generating PDF..." : "Download PDF"}
+            </button>
           </div>
 
           {isLoading ? (
