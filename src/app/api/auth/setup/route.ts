@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 
 export async function POST(req: Request) {
   try {
-    const { email, tempPassword, newPassword, profilePhotoUrl } = await req.json();
+    const { email, tempPassword, newPassword, profilePhotoUrl, initials } = await req.json();
 
     if (!email || !tempPassword || !newPassword || !profilePhotoUrl) {
       return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
@@ -18,13 +18,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Invalid request" }, { status: 400 });
     }
 
-// Verify the temporary password one last time for security
     const isTempValid = await bcrypt.compare(tempPassword, user.password_hash);
     if (!isTempValid) {
       return NextResponse.json({ message: "Authentication failed" }, { status: 401 });
     }
 
-    // NEW SECURITY CHECK: Prevent reusing the temporary password
     if (tempPassword === newPassword) {
       return NextResponse.json(
         { message: "Your new password must be different from the temporary password." }, 
@@ -32,22 +30,30 @@ export async function POST(req: Request) {
       );
     }
 
-    // Hash the new, secure password
     const hashedNewPassword = await bcrypt.hash(newPassword, 12);
 
-    // Finalize the account setup in MongoDB
+    // Prepare the update document
+    const updateData: any = {
+      password_hash: hashedNewPassword,
+      profile_photo_url: profilePhotoUrl,
+      needs_setup: false
+    };
+
+    // If the user is faculty, require and update the initials
+    if (["faculty", "advisor", "dept_head"].includes(user.role)) {
+      if (!initials) {
+        return NextResponse.json({ message: "Initials are required for faculty members." }, { status: 400 });
+      }
+      updateData.initials = initials;
+    }
+
     await db.collection("users").updateOne(
       { _id: user._id },
-      { 
-        $set: { 
-          password_hash: hashedNewPassword, 
-          profile_photo_url: profilePhotoUrl,
-          needs_setup: false 
-        } 
-      }
+      { $set: updateData }
     );
 
     return NextResponse.json({ message: "Setup complete" }, { status: 200 });
+
   } catch (error) {
     console.error("Setup processing error:", error);
     return NextResponse.json({ message: "Internal server error" }, { status: 500 });
