@@ -50,7 +50,7 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
 
   const deptHeadLinks = [
     { name: "Series Manager", href: "/dashboard/series-manager", icon: Network },
-    { name: "Course Allocation", href: "/dashboard/course-allocation", icon: BookOpen }
+    { name: "Routine Builder", href: "/dashboard/routine-builder", icon: BookOpen }
     
   ];
 
