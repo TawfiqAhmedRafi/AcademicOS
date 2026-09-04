@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { BookOpen, Users, Loader2, Save, GraduationCap, Edit2 } from "lucide-react";
+import { BookOpen, Users, Loader2, Save, Edit2, Layers, CheckCircle2 } from "lucide-react";
+import { useToast } from "@/app/components/ToastProvider";
 
 type Faculty = { _id: string; name: string; initials: string; designation: string };
 type Allocation = { series: number; courseCode: string; type: string; teachers: string[] };
@@ -11,32 +12,44 @@ export default function CourseAllocationPage() {
   const [allocations, setAllocations] = useState<Allocation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Tab State
+  const [activeTab, setActiveTab] = useState<number | null>(null);
+
   // Editing state
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [tempTeachers, setTempTeachers] = useState<string>("");
 
+  const { showToast } = useToast();
+
   const fetchData = async () => {
+    setIsLoading(true);
     const res = await fetch("/api/head/course-allocation");
     if (res.ok) {
       const data = await res.json();
       setFaculty(data.faculty);
       setAllocations(data.allocations);
+      
+      // Auto-select the newest series tab on initial load
+      if (data.allocations.length > 0 && !activeTab) {
+        const uniqueSeries = Array.from(new Set(data.allocations.map((a: Allocation) => a.series))).sort((a: any, b: any) => b - a) as number[];
+        setActiveTab(uniqueSeries[0]);
+      }
     }
     setIsLoading(false);
   };
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const getFacultyName = (initial: string) => {
     if (["All", "N/A", "TBA"].includes(initial)) return initial;
     const found = faculty.find(f => f.initials === initial);
-    return found ? found.name : initial; // Fallback to initial if not found in DB
+    return found ? found.name : initial;
   };
 
   const handleSave = async (series: number, courseCode: string) => {
-    // Convert comma-separated string back to array, trimming whitespace
     const newTeachersArray = tempTeachers.split(",").map(t => t.trim()).filter(Boolean);
 
     const res = await fetch("/api/head/course-allocation", {
@@ -47,9 +60,16 @@ export default function CourseAllocationPage() {
 
     if (res.ok) {
       setEditingKey(null);
-      fetchData(); // Silent refresh
+      showToast(`Allocation updated for ${courseCode}`, "success");
+      
+      // Silent refresh to update the table instantly
+      const refreshRes = await fetch("/api/head/course-allocation");
+      if (refreshRes.ok) {
+        const refreshData = await refreshRes.json();
+        setAllocations(refreshData.allocations);
+      }
     } else {
-      alert("Failed to update allocation.");
+      showToast("Failed to update allocation.", "error");
     }
   };
 
@@ -68,6 +88,8 @@ export default function CourseAllocationPage() {
     return acc;
   }, {} as Record<number, Allocation[]>);
 
+  const sortedSeries = Object.keys(groupedAllocations).sort((a, b) => Number(b) - Number(a));
+
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       
@@ -77,94 +99,117 @@ export default function CourseAllocationPage() {
         </div>
         <div>
           <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white">Course Allocation</h1>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Map faculty members to routine slots via their initials.</p>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Manage faculty course assignments across all active batches.</p>
         </div>
       </div>
 
-      <div className="space-y-8">
-        {Object.entries(groupedAllocations).sort((a, b) => Number(b[0]) - Number(a[0])).map(([series, courses]) => (
-          <div key={series} className="glass-panel overflow-hidden rounded-3xl">
-            
-            {/* Header */}
-            <div className="flex items-center gap-3 border-b border-slate-200 bg-slate-50/50 px-6 py-4 dark:border-white/10 dark:bg-white/5">
-              <GraduationCap className="text-ruet-blue dark:text-ruet-gold" size={20} />
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Series {series}</h2>
-            </div>
+      {/* SERIES TABS */}
+      <div className="flex gap-2 overflow-x-auto pb-4 custom-scrollbar mb-4">
+        {sortedSeries.map(seriesStr => {
+          const series = Number(seriesStr);
+          const isActive = activeTab === series;
+          return (
+            <button
+              key={series}
+              onClick={() => setActiveTab(series)}
+              className={`px-6 py-3 rounded-xl font-bold text-sm whitespace-nowrap transition-all ${
+                isActive
+                  ? "bg-ruet-blue text-white shadow-md dark:bg-ruet-gold dark:text-black"
+                  : "bg-white/50 text-slate-600 hover:bg-white/80 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
+              }`}
+            >
+              Series {series}
+            </button>
+          );
+        })}
+      </div>
 
-            {/* Courses List */}
-            <div className="divide-y divide-slate-100 dark:divide-white/5">
-              {courses.map((course) => {
-                const key = `${course.series}-${course.courseCode}`;
-                const isEditing = editingKey === key;
+      {/* DATA GRID */}
+      {activeTab && (
+        <div className="glass-panel overflow-hidden rounded-3xl pb-10 animate-in fade-in duration-300">
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50/50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
+                <tr>
+                  <th className="px-6 py-4 font-semibold text-slate-600 dark:text-slate-300">Course Code</th>
+                  <th className="px-6 py-4 font-semibold text-slate-600 dark:text-slate-300">Category</th>
+                  <th className="px-6 py-4 font-semibold text-slate-600 dark:text-slate-300">Assigned Faculty</th>
+                  <th className="px-6 py-4 font-semibold text-slate-600 dark:text-slate-300 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                {groupedAllocations[activeTab].map((course) => {
+                  const key = `${course.series}-${course.courseCode}`;
+                  const isEditing = editingKey === key;
 
-                return (
-                  <div key={key} className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between hover:bg-slate-50/30 dark:hover:bg-white/[0.02] transition-colors">
-                    
-                    {/* Course Info */}
-                    <div className="sm:w-1/3">
-                      <div className="flex items-center gap-2">
+                  return (
+                    <tr key={key} className="transition-colors hover:bg-slate-50/30 dark:hover:bg-white/[0.02]">
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <span className="font-bold text-slate-900 dark:text-white">{course.courseCode}</span>
-                        <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
                           course.type === 'lab' || course.type === 'project' || course.type === 'thesis' 
                             ? "bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300" 
                             : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
                         }`}>
-                          {course.type}
+                          <Layers size={12} /> {course.type}
                         </span>
-                      </div>
-                    </div>
-
-                    {/* Teacher Assignment */}
-                    <div className="flex-1">
-                      {isEditing ? (
-                        <div className="flex items-center gap-2">
+                      </td>
+                      <td className="px-6 py-4">
+                        {isEditing ? (
                           <input 
                             type="text"
                             value={tempTeachers}
                             onChange={(e) => setTempTeachers(e.target.value)}
                             placeholder="e.g. FZA, MMH"
-                            className="w-full max-w-xs rounded-lg border border-slate-300 bg-white/50 px-3 py-1.5 text-sm focus:border-ruet-blue focus:outline-none dark:border-white/10 dark:bg-black/20 dark:text-white"
+                            className="w-full max-w-xs rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:border-ruet-blue focus:outline-none dark:border-white/10 dark:bg-black/40 dark:text-white"
+                            autoFocus
                           />
-                          <button 
-                            onClick={() => handleSave(course.series, course.courseCode)}
-                            className="flex items-center gap-1 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-emerald-600"
-                          >
-                            <Save size={14} /> Save
-                          </button>
-                          <button onClick={() => setEditingKey(null)} className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
-                            Cancel
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex flex-wrap items-center gap-2">
-                          {course.teachers.map((initial, idx) => (
-                            <span key={idx} className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700 dark:bg-white/10 dark:text-slate-300" title={`Initial: ${initial}`}>
-                              <Users size={14} className="text-slate-400" />
-                              {getFacultyName(initial)}
-                            </span>
-                          ))}
-                          
+                        ) : (
+                          <div className="flex flex-wrap items-center gap-2">
+                            {course.teachers.map((initial, idx) => (
+                              <span key={idx} className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-white/10 dark:text-slate-300" title={`Initial: ${initial}`}>
+                                <Users size={12} className="text-slate-400" />
+                                {getFacultyName(initial)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-right whitespace-nowrap">
+                        {isEditing ? (
+                          <div className="flex items-center justify-end gap-2">
+                            <button onClick={() => setEditingKey(null)} className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+                              Cancel
+                            </button>
+                            <button 
+                              onClick={() => handleSave(course.series, course.courseCode)}
+                              className="flex items-center gap-1 rounded-lg bg-ruet-blue px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-blue-900 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400"
+                            >
+                              <CheckCircle2 size={14} /> Save
+                            </button>
+                          </div>
+                        ) : (
                           <button 
                             onClick={() => {
                               setEditingKey(key);
                               setTempTeachers(course.teachers.join(", "));
                             }}
-                            className="ml-2 rounded-full p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200 transition-colors"
+                            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/10 dark:hover:text-white"
                           >
-                            <Edit2 size={14} />
+                            <Edit2 size={14} /> Edit
                           </button>
-                        </div>
-                      )}
-                    </div>
-
-                  </div>
-                );
-              })}
-            </div>
-
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
 
     </div>
   );

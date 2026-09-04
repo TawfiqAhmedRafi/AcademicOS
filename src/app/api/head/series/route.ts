@@ -89,9 +89,13 @@ export async function PATCH(req: Request) {
     if (action === "assign_advisor") {
       const { slot, advisorEmail, advisorName } = payload; // slot is 1 or 2
       
+      const seriesDoc = await db.collection("series").findOne({ _id: new ObjectId(seriesId) });
+      const oldEmail = slot === 1 ? seriesDoc?.advisor1?.email : seriesDoc?.advisor2?.email;
+
       const updateFieldEmail = slot === 1 ? "advisor1.email" : "advisor2.email";
       const updateFieldName = slot === 1 ? "advisor1.name" : "advisor2.name";
 
+      // 1. Update the series document
       await db.collection("series").updateOne(
         { _id: new ObjectId(seriesId) },
         { $set: { 
@@ -102,15 +106,43 @@ export async function PATCH(req: Request) {
         }
       );
 
-      // Upgrade the new faculty member to advisor
+      // 2. Helper function to sync a user's role and series tags
+      const syncUserRole = async (emailToSync: string) => {
+        if (!emailToSync) return;
+        
+        // Find ALL series this user is currently advising
+        const advisedSeries = await db.collection("series").find({
+          status: "active",
+          $or: [{ "advisor1.email": emailToSync }, { "advisor2.email": emailToSync }]
+        }).toArray();
+
+        if (advisedSeries.length > 0) {
+          // They are advising at least one series -> Ensure they are an advisor and stamp the series
+          const seriesList = advisedSeries.map(s => s.series).join(", ");
+          await db.collection("users").updateOne(
+            { email: emailToSync, role: { $in: ["faculty", "advisor"] } },
+            { $set: { role: "advisor", series: seriesList } }
+          );
+        } else {
+          // They are no longer advising ANY series -> Demote to faculty and remove series tag
+          await db.collection("users").updateOne(
+            { email: emailToSync, role: "advisor" },
+            { $set: { role: "faculty" }, $unset: { series: "" } }
+          );
+        }
+      };
+
+      // 3. Sync the old advisor (Demote if necessary)
+      if (oldEmail && oldEmail !== advisorEmail) {
+        await syncUserRole(oldEmail);
+      }
+
+      // 4. Sync the new advisor (Promote if necessary)
       if (advisorEmail) {
-        await db.collection("users").updateOne(
-          { email: advisorEmail, role: "faculty" },
-          { $set: { role: "advisor" } }
-        );
+        await syncUserRole(advisorEmail);
       }
       
-      await logSystemAction("Advisor Assigned", "Audit", `Assigned ${advisorName} to a series.`);
+      await logSystemAction("Advisor Assigned", "Audit", `Assigned ${advisorName} to Series ${seriesDoc?.series}.`);
       return NextResponse.json({ message: "Advisor assigned" });
     }
 
