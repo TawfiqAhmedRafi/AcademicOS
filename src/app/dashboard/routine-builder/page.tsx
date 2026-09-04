@@ -26,33 +26,39 @@ export default function RoutineBuilderPage() {
   const [slots, setSlots] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
   const [activeSeries, setActiveSeries] = useState<number | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  
+  const [isLoading, setIsLoading] = useState(true); // only for the INITIAL page load
+
   const [editorModal, setEditorModal] = useState<{ isNew: boolean, data: any } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { showToast } = useToast();
 
-  const fetchData = async () => {
+  // Runs once on mount. This is the ONLY place allowed to toggle the full-page isLoading spinner.
+  const fetchInitialData = async () => {
     setIsLoading(true);
-    const [routineRes, facultyRes] = await Promise.all([
-      fetch("/api/routine"),
-      fetch("/api/head/faculty-list")
-    ]);
+    try {
+      const [routineRes, facultyRes] = await Promise.all([
+        fetch("/api/routine"),
+        fetch("/api/head/faculty-list")
+      ]);
 
-    if (routineRes.ok) {
-      const data = await routineRes.json();
-      setConfigs(data.seriesConfigs);
-      setSlots(data.slots);
-      if (data.seriesConfigs.length > 0 && !activeSeries) {
-        setActiveSeries(Number(data.seriesConfigs[0].series));
+      if (routineRes.ok) {
+        const data = await routineRes.json();
+        setConfigs(data.seriesConfigs);
+        setSlots(data.slots);
+        if (data.seriesConfigs.length > 0) {
+          setActiveSeries(Number(data.seriesConfigs[0].series));
+        }
       }
+      if (facultyRes.ok) {
+        setTeachers(await facultyRes.json());
+      }
+    } finally {
+      setIsLoading(false);
     }
-    if (facultyRes.ok) {
-      setTeachers(await facultyRes.json());
-    }
-    setIsLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchInitialData(); }, []);
 
   const activeSlots = slots.filter(s => s.series === activeSeries);
   const activeConfig = configs.find(c => Number(c.series) === activeSeries);
@@ -61,7 +67,7 @@ export default function RoutineBuilderPage() {
     const g: any = {};
     DAYS.forEach(d => { g[d] = {}; NUM_PERIODS.forEach(p => { g[d][p] = null; }); });
     const consumed: any = {};
-    
+
     activeSlots.forEach(slot => {
       const key = `${slot.day}-${slot.startPeriod}`;
       if (!consumed[key]) {
@@ -90,30 +96,63 @@ export default function RoutineBuilderPage() {
 
     if (!result.isConfirmed) return;
 
-    const res = await fetch(`/api/routine?id=${id}`, { method: "DELETE" });
-    if (res.ok) {
-      showToast("Slot deleted", "success");
-      setEditorModal(null);
-      fetchData();
-    } else {
-      showToast("Failed to delete slot", "error");
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/routine?id=${id}`, { method: "DELETE" });
+      if (res.ok) {
+        // Surgical update: drop just this slot from local state, no refetch, no full-page reload.
+        setSlots(prev => prev.filter(s => s._id !== id));
+        showToast("Slot deleted", "success");
+        setEditorModal(null);
+      } else {
+        showToast("Failed to delete slot", "error");
+      }
+    } catch {
+      showToast("Network error while deleting slot", "error");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
   const handleSaveSlot = async (payload: any) => {
-    const method = editorModal?.isNew ? "POST" : "PUT";
-    const res = await fetch("/api/routine", {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...payload, series: activeSeries, semester: activeConfig?.currentSemester })
-    });
+    const wasNew = !!editorModal?.isNew;
+    const method = wasNew ? "POST" : "PUT";
 
-    if (res.ok) {
-      showToast(editorModal?.isNew ? "Slot created" : "Slot updated", "success");
-      setEditorModal(null);
-      fetchData();
-    } else {
-      showToast("Failed to save slot", "error");
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/routine", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, series: activeSeries, semester: activeConfig?.currentSemester })
+      });
+
+      if (res.ok) {
+        const raw = await res.json().catch(() => null);
+        // Be flexible about API response shape: { slot: {...} } | { data: {...} } | {...}
+        const savedSlot = raw?.slot || raw?.data || raw;
+
+        if (savedSlot && savedSlot._id) {
+          setSlots(prev => {
+            if (wasNew) return [...prev, savedSlot];
+            return prev.map(s => (s._id === savedSlot._id ? savedSlot : s));
+          });
+        } else {
+          // API didn't return the saved slot in a usable shape — do a silent, non-blocking
+          // background refresh of just the routine data (no full-page spinner).
+          fetch("/api/routine").then(r => r.ok ? r.json() : null).then(data => {
+            if (data) { setConfigs(data.seriesConfigs); setSlots(data.slots); }
+          });
+        }
+
+        showToast(wasNew ? "Slot created" : "Slot updated", "success");
+        setEditorModal(null);
+      } else {
+        showToast("Failed to save slot", "error");
+      }
+    } catch {
+      showToast("Network error while saving slot", "error");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -165,7 +204,7 @@ export default function RoutineBuilderPage() {
                       {TIME_PERIODS.map(tp => {
                         if (tp.isBreak) return <td key={tp.period} className="bg-amber-50/50 dark:bg-amber-500/5 border-l border-slate-200 dark:border-white/10" />;
                         if (consumed[tp.period] || grid[day]?.[tp.period] === 'CONSUMED') return null;
-                        
+
                         const slot = grid[day]?.[tp.period];
                         const colSpan = slot ? slot.periodSpanArr.length : 1;
                         if (slot) slot.periodSpanArr.slice(1).forEach((p: number) => consumed[p] = true);
@@ -173,7 +212,7 @@ export default function RoutineBuilderPage() {
                         return (
                           <td key={tp.period} colSpan={colSpan} className="p-1 border-l border-slate-200 dark:border-white/10">
                             {slot ? (
-                              <button 
+                              <button
                                 onClick={() => setEditorModal({ isNew: false, data: slot })}
                                 className="group relative w-full min-h-[4.5rem] bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-lg p-2 flex flex-col justify-between hover:shadow-md transition-all text-left"
                               >
@@ -189,7 +228,7 @@ export default function RoutineBuilderPage() {
                                 </div>
                               </button>
                             ) : (
-                              <button 
+                              <button
                                 onClick={() => setEditorModal({ isNew: true, data: { day, startPeriod: tp.period, type: 'theory', periodSpan: 1 } })}
                                 className="w-full min-h-[4.5rem] border border-dashed border-slate-300 dark:border-slate-700 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
                               >
@@ -209,13 +248,15 @@ export default function RoutineBuilderPage() {
       )}
 
       {editorModal && (
-        <SlotEditorModal 
-          modal={editorModal} 
-          allMasterSlots={slots} 
-          allTeachers={teachers} 
-          onClose={() => setEditorModal(null)} 
-          onSave={handleSaveSlot} 
-          onDelete={handleDelete} 
+        <SlotEditorModal
+          modal={editorModal}
+          allMasterSlots={slots}
+          allTeachers={teachers}
+          onClose={() => setEditorModal(null)}
+          onSave={handleSaveSlot}
+          onDelete={handleDelete}
+          isSaving={isSaving}
+          isDeleting={isDeleting}
         />
       )}
     </div>
@@ -223,7 +264,7 @@ export default function RoutineBuilderPage() {
 }
 
 // --- INTERNAL MODAL COMPONENT ---
-function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, onDelete }: any) {
+function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, onDelete, isSaving, isDeleting }: any) {
   const isNew = modal.isNew;
   const init = modal.data;
 
@@ -251,7 +292,7 @@ function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, 
 
       const slotSpan = slot.periodSpan || 1;
       const existingPeriods = Array.from({ length: slotSpan }, (_, i) => slot.startPeriod + i);
-      
+
       const hasTimeOverlap = requestedPeriods.some(p => existingPeriods.includes(p));
       if (hasTimeOverlap) {
         if (slot.room && slot.room !== "N/A") {
@@ -276,7 +317,7 @@ function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, 
 
   const handleRoomToggle = (r: string) => {
     if (busyRooms.has(r)) return;
-    
+
     if (isMultiRoom) {
       let currentRooms = form.room ? form.room.split(',').map((x: string) => x.trim()) : [];
       if (currentRooms.includes(r)) {
@@ -388,7 +429,7 @@ function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, 
                   <button
                     key={r} type="button" onClick={() => handleRoomToggle(r)} disabled={isBusy}
                     className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all border ${
-                      isBusy ? "bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700 cursor-not-allowed" 
+                      isBusy ? "bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700 cursor-not-allowed"
                       : isSelected ? "bg-ruet-blue text-white border-ruet-blue dark:bg-ruet-gold dark:text-black dark:border-ruet-gold shadow-md"
                       : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50 dark:bg-black/20 dark:border-white/10 dark:text-slate-300"
                     }`}
@@ -404,7 +445,7 @@ function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, 
           <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-xl border border-slate-200 dark:border-white/10">
             <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Assign Teachers</label>
             <div className="flex flex-wrap gap-2 mt-2">
-              {allTeachers.map((t: any) => { // FIXED: Changed teachers to allTeachers here
+              {allTeachers.map((t: any) => {
                 const init = t.initials;
                 if(!init) return null;
                 const isBusy = busyTeachers.has(init);
@@ -413,7 +454,7 @@ function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, 
                   <button
                     key={init} type="button" onClick={() => handleTeacherToggle(init)} disabled={isBusy}
                     className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all border ${
-                      isBusy ? "bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700 cursor-not-allowed" 
+                      isBusy ? "bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700 cursor-not-allowed"
                       : isSelected ? "bg-emerald-500 text-white border-emerald-500 dark:bg-emerald-500 dark:text-black dark:border-emerald-500 shadow-md"
                       : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50 dark:bg-black/20 dark:border-white/10 dark:text-slate-300"
                     }`}
@@ -427,12 +468,23 @@ function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, 
 
           <div className="flex gap-3 pt-4">
             {!isNew && (
-              <button type="button" onClick={() => onDelete(init._id)} className="flex-1 bg-red-50 text-red-600 font-bold py-3 rounded-xl border border-red-200 hover:bg-red-100 dark:bg-red-500/10 dark:border-red-500/20 dark:hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2">
-                <Trash2 size={18}/> Delete
+              <button
+                type="button"
+                onClick={() => onDelete(init._id)}
+                disabled={isDeleting || isSaving}
+                className="flex-1 bg-red-50 text-red-600 font-bold py-3 rounded-xl border border-red-200 hover:bg-red-100 dark:bg-red-500/10 dark:border-red-500/20 dark:hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18}/>}
+                {isDeleting ? "Deleting..." : "Delete"}
               </button>
             )}
-            <button type="submit" className="flex-[2] bg-ruet-blue text-white font-bold py-3 rounded-xl hover:bg-blue-900 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400 transition-colors flex items-center justify-center gap-2 shadow-lg">
-              <Save size={18}/> Save Slot
+            <button
+              type="submit"
+              disabled={isSaving || isDeleting}
+              className="flex-[2] bg-ruet-blue text-white font-bold py-3 rounded-xl hover:bg-blue-900 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400 transition-colors flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18}/>}
+              {isSaving ? "Saving..." : "Save Slot"}
             </button>
           </div>
 

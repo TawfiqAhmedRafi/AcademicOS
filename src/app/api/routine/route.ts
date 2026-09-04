@@ -13,7 +13,7 @@ export async function GET(req: Request) {
 
     // 1. Fetch all active series
     const activeSeries = await db.collection("series").find({ status: "active" }).toArray();
-    
+
     // 2. Build dynamic query: Match routine_slots where (series == X AND semester == X.currentSemester)
     const orConditions = activeSeries.map(s => ({
       series: Number(s.series), // Convert string to number to match routine_slots schema
@@ -53,9 +53,13 @@ export async function POST(req: Request) {
       updatedAt: new Date()
     };
 
-    await db.collection("routine_slots").insertOne(newSlot);
+    const result = await db.collection("routine_slots").insertOne(newSlot);
     await logSystemAction("Routine Slot Created", "System", `Slot added for ${data.courseCode}`);
-    return NextResponse.json({ message: "Slot created" }, { status: 201 });
+
+    // Return the full saved slot (including its new _id) so the client can update
+    // its local state directly instead of refetching the whole routine.
+    const savedSlot = { ...newSlot, _id: result.insertedId };
+    return NextResponse.json({ message: "Slot created", slot: savedSlot }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: "Failed to create slot" }, { status: 500 });
   }
@@ -73,11 +77,12 @@ export async function DELETE(req: Request) {
 
     const client = await clientPromise;
     await client.db("academicos").collection("routine_slots").deleteOne({ _id: new ObjectId(id) });
-    return NextResponse.json({ message: "Slot deleted" });
+    return NextResponse.json({ message: "Slot deleted", id });
   } catch (error) {
     return NextResponse.json({ error: "Failed to delete slot" }, { status: 500 });
   }
 }
+
 // PUT: Update an existing slot
 export async function PUT(req: Request) {
   const session = await getServerSession(authOptions);
@@ -86,17 +91,22 @@ export async function PUT(req: Request) {
   try {
     const data = await req.json();
     const { _id, ...updateData } = data;
-    
+
     const client = await clientPromise;
     const db = client.db("academicos");
 
+    const finalUpdate = { ...updateData, series: Number(updateData.series), updatedAt: new Date() };
+
     await db.collection("routine_slots").updateOne(
       { _id: new ObjectId(_id) },
-      { $set: { ...updateData, series: Number(updateData.series), updatedAt: new Date() } }
+      { $set: finalUpdate }
     );
 
     await logSystemAction("Routine Slot Updated", "System", `Slot updated for ${updateData.courseCode}`);
-    return NextResponse.json({ message: "Slot updated" }, { status: 200 });
+
+    // Return the full updated slot so the client can patch its local state directly.
+    const savedSlot = { ...finalUpdate, _id };
+    return NextResponse.json({ message: "Slot updated", slot: savedSlot }, { status: 200 });
   } catch (error) {
     return NextResponse.json({ error: "Failed to update slot" }, { status: 500 });
   }
