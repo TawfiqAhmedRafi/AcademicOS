@@ -7,9 +7,12 @@ import { useToast } from "@/app/components/ToastProvider";
 export default function PendingApprovalsPage() {
   const [students, setStudents] = useState<any[]>([]);
   const [seriesData, setSeriesData] = useState<any[]>([]);
+  const [courses, setCourses] = useState<any[]>([]); // NEW: Store courses for mapping
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'registration' | 'formFillup'>('registration');
   const [processingId, setProcessingId] = useState<string | null>(null);
+  
+  const [payloadModal, setPayloadModal] = useState<any | null>(null);
   
   const { showToast } = useToast();
 
@@ -20,6 +23,7 @@ export default function PendingApprovalsPage() {
       const data = await res.json();
       setSeriesData(data.seriesData);
       setStudents(data.students);
+      setCourses(data.courses || []); // NEW: Save courses to state
     }
     setIsLoading(false);
   };
@@ -29,7 +33,6 @@ export default function PendingApprovalsPage() {
   const handleReview = async (studentId: string, series: string, isApproved: boolean) => {
     setProcessingId(studentId);
     
-    // Determine the precise action to send to the PATCH route
     let action = "";
     if (activeTab === 'registration') {
       action = isApproved ? "approve_individual_reg" : "reject_individual_reg";
@@ -45,7 +48,6 @@ export default function PendingApprovalsPage() {
 
     if (res.ok) {
       showToast(isApproved ? "Approved successfully" : "Returned to student", "success");
-      // Update local state to remove the processed card instantly
       setStudents(prev => prev.map(s => {
         if (s._id === studentId) {
           if (activeTab === 'registration') return { ...s, registrationStatus: isApproved ? 'approved' : 'unregistered' };
@@ -61,7 +63,6 @@ export default function PendingApprovalsPage() {
 
   if (isLoading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="animate-spin text-ruet-blue dark:text-ruet-gold" size={32} /></div>;
 
-  // Filter only students who are 'pending' for the currently selected tab
   const pendingStudents = students.filter(s => 
     activeTab === 'registration' 
       ? s.registrationStatus === 'pending' 
@@ -82,7 +83,6 @@ export default function PendingApprovalsPage() {
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Review and approve individual student submissions.</p>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-4 border-b border-slate-200 dark:border-white/10 mb-8">
         <button 
           onClick={() => setActiveTab('registration')}
@@ -96,7 +96,7 @@ export default function PendingApprovalsPage() {
           className={`pb-4 px-2 text-sm font-bold flex items-center gap-2 transition-colors border-b-2 ${activeTab === 'formFillup' ? 'border-ruet-blue text-ruet-blue dark:border-ruet-gold dark:text-ruet-gold' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
         >
           Form Fill-ups 
-          {ffPendingCount > 0 && <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full text-[10px] dark:bg-emerald-500/20 dark:text-emerald-400">{ffPendingCount}</span>}
+          {ffPendingCount > 0 && <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full text-[10px] dark:bg-purple-500/20 dark:text-purple-400">{ffPendingCount}</span>}
         </button>
       </div>
 
@@ -132,16 +132,18 @@ export default function PendingApprovalsPage() {
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">{student.name}</h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mb-6">{student.email}</p>
                   
-                  {/* Mock details for what the student selected - will connect to real submission data later */}
-                  <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-4 mb-6">
+                  <button 
+                    onClick={() => setPayloadModal(student)}
+                    className="w-full text-left bg-slate-50 dark:bg-white/5 rounded-xl p-4 mb-6 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors group"
+                  >
                     <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase mb-2">
                       <span>Submitted Payload</span>
-                      <ArrowRight size={14} />
+                      <ArrowRight size={14} className="transition-transform group-hover:translate-x-1" />
                     </div>
                     <p className="text-sm text-slate-700 dark:text-slate-300 italic opacity-70">
-                      Click review details to see exact selections before approving...
+                      {student.registeredCourses ? `${student.registeredCourses.length} courses selected. Click to view.` : "No courses selected."}
                     </p>
-                  </div>
+                  </button>
                 </div>
 
                 <div className="flex gap-3">
@@ -163,6 +165,58 @@ export default function PendingApprovalsPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Payload Details Modal */}
+      {payloadModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm dark:bg-black/60 animate-in fade-in duration-200">
+          <div className="glass-panel w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl dark:bg-[#0f172a] animate-in zoom-in-95">
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Registration Payload</h2>
+              <button onClick={() => setPayloadModal(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+                <XCircle size={20} />
+              </button>
+            </div>
+            
+            <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-5 max-h-[60vh] overflow-y-auto custom-scrollbar">
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Student: {payloadModal.name}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">{payloadModal.email}</p>
+              
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 border-b border-slate-200 dark:border-slate-700 pb-2">Selected Courses</h4>
+              
+              {payloadModal.registeredCourses && payloadModal.registeredCourses.length > 0 ? (
+                <ul className="space-y-3">
+                  {payloadModal.registeredCourses.map((id: string, idx: number) => {
+                    // NEW: Find the matching course from our catalog
+                    const courseMatch = courses.find(c => c._id === id);
+                    
+                    return (
+                      <li key={idx} className="flex items-center justify-between bg-white dark:bg-black/20 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                        <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                          {courseMatch ? courseMatch.courseCode : id}
+                        </span>
+                        {courseMatch && (
+                          <span className="text-[10px] uppercase font-semibold text-slate-400 max-w-[50%] text-right truncate" title={courseMatch.title}>
+                            {courseMatch.title}
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="text-sm italic opacity-70 text-slate-500">No courses submitted.</p>
+              )}
+            </div>
+            
+            <button 
+              onClick={() => setPayloadModal(null)}
+              className="mt-6 w-full py-3 bg-slate-200 hover:bg-slate-300 dark:bg-white/10 dark:hover:bg-white/20 text-slate-800 dark:text-white rounded-xl font-bold transition-colors"
+            >
+              Close
+            </button>
+          </div>
         </div>
       )}
     </div>

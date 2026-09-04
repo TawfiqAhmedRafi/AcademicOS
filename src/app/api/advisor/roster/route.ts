@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
 import { logSystemAction } from "@/lib/logger";
+import { ObjectId } from "mongodb"; // <-- NEW: Properly imported ObjectId
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -26,7 +27,13 @@ export async function GET(req: Request) {
       .project({ password_hash: 0, resetOtp: 0 }) 
       .toArray();
 
-    return NextResponse.json({ seriesData, students });
+    // Fetch courses so the frontend can resolve IDs to Course Codes
+    const courses = await db.collection("courses")
+      .find({})
+      .project({ courseCode: 1, title: 1 })
+      .toArray();
+
+    return NextResponse.json({ seriesData, students, courses });
   } catch (error) {
     console.error("Advisor Roster Fetch Error:", error);
     return NextResponse.json({ error: "Failed to fetch roster data" }, { status: 500 });
@@ -93,8 +100,10 @@ export async function PATCH(req: Request) {
     // --- INDIVIDUAL APPROVALS (For the Approvals Page) ---
     if (action === "approve_individual_reg" || action === "reject_individual_reg") {
       const newStatus = action === "approve_individual_reg" ? "approved" : "unregistered"; // Rejection forces them to resubmit
+      
+      // FIXED: Properly cast the ID using the imported ObjectId
       await db.collection("users").updateOne(
-        { _id: new client.topology.bson.ObjectId(payload.studentId) },
+        { _id: new ObjectId(payload.studentId) },
         { $set: { registrationStatus: newStatus, updatedAt: new Date() } }
       );
       return NextResponse.json({ message: `Registration ${newStatus}` });
@@ -102,8 +111,10 @@ export async function PATCH(req: Request) {
 
     if (action === "approve_individual_ff" || action === "reject_individual_ff") {
       const newStatus = action === "approve_individual_ff" ? "approved" : "unregistered";
+      
+      // FIXED: Properly cast the ID using the imported ObjectId
       await db.collection("users").updateOne(
-        { _id: new client.topology.bson.ObjectId(payload.studentId) },
+        { _id: new ObjectId(payload.studentId) },
         { $set: { formFillupStatus: newStatus, updatedAt: new Date() } }
       );
       return NextResponse.json({ message: `Form Fill-up ${newStatus}` });
@@ -111,6 +122,7 @@ export async function PATCH(req: Request) {
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (error) {
+    console.error("Advisor Roster Patch Error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
