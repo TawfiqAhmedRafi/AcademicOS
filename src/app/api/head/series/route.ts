@@ -68,12 +68,55 @@ export async function PATCH(req: Request) {
     const db = client.db("academicos");
 
     if (action === "update_semester") {
+      // 1. Fetch the series to know what semester we are archiving
+      const seriesDoc = await db.collection("series").findOne({ _id: new ObjectId(seriesId) });
+      const oldSemester = seriesDoc?.currentSemester;
+
+      if (oldSemester) {
+        // 2. Fetch all students in this series
+        const students = await db.collection("users").find({ role: "student", series: seriesDoc.series }).toArray();
+
+        if (students.length > 0) {
+          // 3. Prepare a Bulk Write to archive their data and reset their active state
+          const bulkOps = students.map(student => ({
+            updateOne: {
+              filter: { _id: student._id },
+              update: {
+                $push: {
+                  academicHistory: {
+                    semester: oldSemester,
+                    courses: student.registeredCourses || [],
+                    registrationStatus: student.registrationStatus || "unregistered",
+                    formFillupStatus: student.formFillupStatus || "unregistered",
+                    archivedAt: new Date()
+                  }
+                },
+                $set: {
+                  registrationStatus: "unregistered",
+                  formFillupStatus: "unregistered",
+                  registeredCourses: []
+                }
+              }
+            }
+          }));
+          await db.collection("users").bulkWrite(bulkOps);
+        }
+      }
+
+      // 4. Update the series to the new semester and automatically lock the gates
       await db.collection("series").updateOne(
         { _id: new ObjectId(seriesId) },
-        { $set: { currentSemester: payload.newSemester, updatedAt: new Date() } }
+        { $set: { 
+            currentSemester: payload.newSemester, 
+            "registration.isOpen": false,
+            "formFillup.isOpen": false,
+            updatedAt: new Date() 
+          } 
+        }
       );
-      await logSystemAction("Semester Promoted", "System", `Series advanced to ${payload.newSemester}`);
-      return NextResponse.json({ message: "Semester updated" });
+
+      await logSystemAction("Semester Promoted", "System", `Series ${seriesDoc?.series} advanced from ${oldSemester} to ${payload.newSemester}`);
+      return NextResponse.json({ message: "Semester updated and previous records archived." });
     }
 
     if (action === "graduate") {
@@ -86,14 +129,13 @@ export async function PATCH(req: Request) {
     }
 
     if (action === "assign_advisor") {
-      const { slot, advisorEmail, advisorName } = payload; // slot is 1 or 2
+      const { slot, advisorEmail, advisorName } = payload; 
       
       const seriesDoc = await db.collection("series").findOne({ _id: new ObjectId(seriesId) });
       const oldEmail = slot === 1 ? seriesDoc?.advisor1?.email : seriesDoc?.advisor2?.email;
       const updateFieldEmail = slot === 1 ? "advisor1.email" : "advisor2.email";
       const updateFieldName = slot === 1 ? "advisor1.name" : "advisor2.name";
 
-      // 1. Update the series document
       await db.collection("series").updateOne(
         { _id: new ObjectId(seriesId) },
         { $set: { 
@@ -104,31 +146,26 @@ export async function PATCH(req: Request) {
          }
       );
 
-      // 2. Helper function to sync a user's role and advising_series attributes
       const syncUserRole = async (emailToSync: string) => {
         if (!emailToSync) return;
 
         const userDoc = await db.collection("users").findOne({ email: emailToSync });
         if (!userDoc) return;
 
-        // Smart Role Preservation: Never demote the Dept Head. Everyone else becomes a standard Faculty.
         const baseRole = userDoc.role === "dept_head" ? "dept_head" : "faculty";
         
-        // Find ALL series this user is currently advising
         const advisedSeries = await db.collection("series").find({
           status: "active",
           $or: [{ "advisor1.email": emailToSync }, { "advisor2.email": emailToSync }]
         }).toArray();
 
         if (advisedSeries.length > 0) {
-          // They are advising at least one series -> Ensure they are 'faculty' and stamp the series numbers
           const seriesList = advisedSeries.map(s => s.series).join(", ");
           await db.collection("users").updateOne(
             { email: emailToSync },
             { $set: { advising_series: seriesList, role: baseRole }, $unset: { series: "" } }
           );
         } else {
-          // They are no longer advising ANY series -> Revert to faculty and strip the attribute
           await db.collection("users").updateOne(
             { email: emailToSync },
             { $set: { role: baseRole }, $unset: { advising_series: "", series: "" } }
@@ -136,15 +173,8 @@ export async function PATCH(req: Request) {
         }
       };
 
-      // 3. Sync the old advisor (Demote/Clean if necessary)
-      if (oldEmail && oldEmail !== advisorEmail) {
-        await syncUserRole(oldEmail);
-      }
-
-      // 4. Sync the new advisor (Promote/Stamp if necessary)
-      if (advisorEmail) {
-        await syncUserRole(advisorEmail);
-      }
+      if (oldEmail && oldEmail !== advisorEmail) await syncUserRole(oldEmail);
+      if (advisorEmail) await syncUserRole(advisorEmail);
       
       await logSystemAction("Advisor Assigned", "Audit", `Assigned ${advisorName} to Series ${seriesDoc?.series}.`);
       return NextResponse.json({ message: "Advisor assigned" });

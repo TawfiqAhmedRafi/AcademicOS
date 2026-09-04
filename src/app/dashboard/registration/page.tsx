@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, Lock, CheckCircle2, Clock, BookOpen, AlertCircle, Send } from "lucide-react";
 import { useToast } from "@/app/components/ToastProvider";
+import Swal from "sweetalert2";
 
 export default function StudentRegistrationPage() {
   const [data, setData] = useState<any>(null);
@@ -35,7 +36,17 @@ export default function StudentRegistrationPage() {
   };
 
   const handleSubmit = async () => {
-    if (!confirm("Are you sure you want to submit your course list? You will not be able to edit it once submitted.")) return;
+   const result = await Swal.fire({
+  title: "Are you sure?",
+  text: "Are you sure you want to submit your course list? You will not be able to edit it once submitted .",
+  icon: "warning",
+  showCancelButton: true,
+  confirmButtonText: "Yes, Submit",
+  cancelButtonText: "Cancel",
+  reverseButtons: true,
+});
+
+if (!result.isConfirmed) return;
     
     setIsSubmitting(true);
     
