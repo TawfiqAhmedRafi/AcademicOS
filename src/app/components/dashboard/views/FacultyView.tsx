@@ -3,11 +3,20 @@ import { BookOpen, FileText, ShieldAlert, Calendar, UploadCloud, CheckCircle } f
 import { StatCard, AlertBanner } from "../Widgets";
 
 export default function FacultyView({ user }: { user: any }) {
+
+  const isAdvisor = !!user.advising_series;
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
       <h1 className="mb-8 text-3xl font-extrabold text-slate-900 dark:text-white">
         Faculty Portal
       </h1>
+      {isAdvisor && (
+        <AlertBanner 
+          title={`Advisor Access Unlocked: Series ${user.advising_series}`}
+          message="Use the Advisor Tools in your sidebar to manage your advisee rosters and pending approvals."
+          type="info"
+        />
+      )}
 
       <AlertBanner 
         title="Pending Marks Submission" 

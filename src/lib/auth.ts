@@ -15,24 +15,15 @@ export const authOptions: NextAuthOptions = {
                 password: { label: "Password", type: "password" },
             },
             async authorize(credentials) {
-                console.log("--- AUTH ATTEMPT ---");
-                console.log("1. Email entered:");
-                
                 if (!credentials?.email || !credentials?.password) return null;
 
                 const client = await clientPromise;
                 const db = client.db("academicos");
                 const user = await db.collection("users").findOne({ email: credentials.email });
 
-                if (!user) {
-                    console.log("  ERROR: User not found in MongoDB.");
-                    throw new Error("Invalid email or password");
-                }
-
-                console.log("2. User found in DB.");
+                if (!user) throw new Error("Invalid email or password");
 
                 if (user.lockoutUntil && new Date(user.lockoutUntil) > new Date()) {
-                    console.log("  ERROR: Account is locked.");
                     throw new Error("Account locked due to too many failed attempts.");
                 }
 
@@ -44,9 +35,7 @@ export const authOptions: NextAuthOptions = {
                         { $inc: { loginAttempts: 1 } },
                         { returnDocument: 'after' } 
                     );
-
                     const attempts = updatedUser?.loginAttempts || updatedUser?.value?.loginAttempts || 1;
-
                     if (attempts >= 5) {
                         await db.collection("users").updateOne(
                             { _id: user._id },
@@ -59,8 +48,6 @@ export const authOptions: NextAuthOptions = {
                 }
 
                 if (user.needs_setup) {
-                    console.log("  INTERCEPT: Throwing NEEDS_SETUP error to trigger frontend UI.");
-                    // MODIFIED: We pass a JSON string back to the frontend containing the role and initials
                     throw new Error(JSON.stringify({ 
                         code: "NEEDS_SETUP", 
                         role: user.role, 
@@ -68,14 +55,12 @@ export const authOptions: NextAuthOptions = {
                     }));
                 }
 
-                console.log("  SUCCESS: Login approved.");
-
                 return {
                     id: user._id.toString(),
                     email: user.email,
                     name: user.name,
                     role: user.role,
-                    series: user.series,
+                    advising_series: user.advising_series, // <-- Updated
                     department: user.department,
                 };
             },
@@ -91,7 +76,7 @@ export const authOptions: NextAuthOptions = {
                 if (dbUser) {
                     token.id = dbUser._id.toString();
                     token.role = dbUser.role;
-                    token.series = dbUser.series;
+                    token.advising_series = dbUser.advising_series; // <-- Updated
                     token.department = dbUser.department;
                     token.picture = dbUser.profile_photo_url;
                 }
@@ -102,7 +87,7 @@ export const authOptions: NextAuthOptions = {
             if (token && session.user) {
                 session.user.id = token.id as string;
                 session.user.role = token.role as string;
-                session.user.series = token.series as string;
+                session.user.advising_series = token.advising_series as string; // <-- Updated
                 session.user.department = token.department as string;
                 session.user.image = token.picture as string;
             }

@@ -119,10 +119,11 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
         {/* Stacked RBAC Links */}
         {user.role === "student" && renderLinks(studentLinks)}
         
-        {user.role === "faculty" && (
+        {(user.role === "faculty" || user.role === "dept_head") && (
           <>
             {renderLinks(facultyBaseLinks, "Faculty Menu")}
-            {renderLinks(advisorLinks, "Advisor Tools")}
+            {/* UNLOCK ADVISOR TOOLS IF ATTRIBUTE EXISTS */}
+            {user.advising_series && renderLinks(advisorLinks, `Advisor Tools (Series ${user.advising_series})`)}
           </>
         )}
 
@@ -157,8 +158,9 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
 
           <div className="flex flex-col overflow-hidden">
             <span className="truncate text-sm font-bold text-slate-900 dark:text-white">{user.name}</span>
-            <span className="truncate text-xs font-medium text-slate-500 dark:text-slate-400 capitalize">
-              {user.role === 'advisor' ? 'Faculty' : user.role.replace('_', ' ')}
+            <span className="truncate text-[11px] font-medium text-slate-500 dark:text-slate-400 capitalize">
+              {user.role === 'dept_head' ? 'Dept Head' : 'Faculty'} 
+              {user.advising_series ? ` • Advisor` : ''}
             </span>
           </div>
         </div>

@@ -7,10 +7,9 @@ import { logSystemAction } from "@/lib/logger";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!["dept_head", "admin", "advisor"].includes(session?.user?.role || "")) {
+  if (!["dept_head", "admin", "advisor", "faculty"].includes(session?.user?.role || "")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
-
   try {
     const client = await clientPromise;
     const db = client.db("academicos");
@@ -30,15 +29,15 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (session?.user?.role !== "dept_head") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-
+  
   try {
     const { series, currentSemester } = await req.json();
     const client = await clientPromise;
     const db = client.db("academicos");
-
+    
     const existing = await db.collection("series").findOne({ series });
     if (existing) return NextResponse.json({ error: "Series already exists" }, { status: 400 });
-
+    
     const newSeries = {
       series,
       currentSemester,
@@ -49,7 +48,7 @@ export async function POST(req: Request) {
       createdAt: new Date(),
       updatedAt: new Date()
     };
-
+    
     await db.collection("series").insertOne(newSeries);
     await logSystemAction("Series Created", "System", `Series ${series} initialized at semester ${currentSemester}`);
     
@@ -62,7 +61,7 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   const session = await getServerSession(authOptions);
   if (session?.user?.role !== "dept_head") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-
+  
   try {
     const { seriesId, action, payload } = await req.json();
     const client = await clientPromise;
@@ -91,7 +90,6 @@ export async function PATCH(req: Request) {
       
       const seriesDoc = await db.collection("series").findOne({ _id: new ObjectId(seriesId) });
       const oldEmail = slot === 1 ? seriesDoc?.advisor1?.email : seriesDoc?.advisor2?.email;
-
       const updateFieldEmail = slot === 1 ? "advisor1.email" : "advisor2.email";
       const updateFieldName = slot === 1 ? "advisor1.name" : "advisor2.name";
 
@@ -99,16 +97,22 @@ export async function PATCH(req: Request) {
       await db.collection("series").updateOne(
         { _id: new ObjectId(seriesId) },
         { $set: { 
-            [updateFieldEmail]: advisorEmail, 
-            [updateFieldName]: advisorName, 
-            updatedAt: new Date() 
-          } 
-        }
+             [updateFieldEmail]: advisorEmail, 
+             [updateFieldName]: advisorName,
+             updatedAt: new Date() 
+           } 
+         }
       );
 
-      // 2. Helper function to sync a user's role and series tags
+      // 2. Helper function to sync a user's role and advising_series attributes
       const syncUserRole = async (emailToSync: string) => {
         if (!emailToSync) return;
+
+        const userDoc = await db.collection("users").findOne({ email: emailToSync });
+        if (!userDoc) return;
+
+        // Smart Role Preservation: Never demote the Dept Head. Everyone else becomes a standard Faculty.
+        const baseRole = userDoc.role === "dept_head" ? "dept_head" : "faculty";
         
         // Find ALL series this user is currently advising
         const advisedSeries = await db.collection("series").find({
@@ -117,27 +121,27 @@ export async function PATCH(req: Request) {
         }).toArray();
 
         if (advisedSeries.length > 0) {
-          // They are advising at least one series -> Ensure they are an advisor and stamp the series
+          // They are advising at least one series -> Ensure they are 'faculty' and stamp the series numbers
           const seriesList = advisedSeries.map(s => s.series).join(", ");
           await db.collection("users").updateOne(
-            { email: emailToSync, role: { $in: ["faculty", "advisor"] } },
-            { $set: { role: "advisor", series: seriesList } }
+            { email: emailToSync },
+            { $set: { advising_series: seriesList, role: baseRole }, $unset: { series: "" } }
           );
         } else {
-          // They are no longer advising ANY series -> Demote to faculty and remove series tag
+          // They are no longer advising ANY series -> Revert to faculty and strip the attribute
           await db.collection("users").updateOne(
-            { email: emailToSync, role: "advisor" },
-            { $set: { role: "faculty" }, $unset: { series: "" } }
+            { email: emailToSync },
+            { $set: { role: baseRole }, $unset: { advising_series: "", series: "" } }
           );
         }
       };
 
-      // 3. Sync the old advisor (Demote if necessary)
+      // 3. Sync the old advisor (Demote/Clean if necessary)
       if (oldEmail && oldEmail !== advisorEmail) {
         await syncUserRole(oldEmail);
       }
 
-      // 4. Sync the new advisor (Promote if necessary)
+      // 4. Sync the new advisor (Promote/Stamp if necessary)
       if (advisorEmail) {
         await syncUserRole(advisorEmail);
       }

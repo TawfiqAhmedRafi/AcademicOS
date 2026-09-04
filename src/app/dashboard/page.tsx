@@ -2,7 +2,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
-// Isolate imports to avoid bloating a single file
 import StudentView from "@/app/components/dashboard/views/StudentView";
 import FacultyView from "@/app/components/dashboard/views/FacultyView";
 import DeptHeadView from "@/app/components/dashboard/views/DeptHeadView";
@@ -10,21 +9,14 @@ import AdminView from "@/app/components/dashboard/views/AdminView";
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
-
-  if (!session?.user) {
-    redirect("/login");
-  }
+  if (!session?.user) redirect("/login");
 
   const { role } = session.user;
 
-  // The Traffic Cop: Renders the precise, isolated Command Center per role
   switch (role) {
     case "student":
       return <StudentView user={session.user} />;
     case "faculty":
-    case "advisor": 
-      // Advisors get the faculty view as a base on the homepage. 
-      // Their extra tools are isolated in the sidebar navigation.
       return <FacultyView user={session.user} />;
     case "dept_head":
       return <DeptHeadView user={session.user} />;
