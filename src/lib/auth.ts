@@ -16,19 +16,15 @@ export const authOptions: NextAuthOptions = {
             },
             async authorize(credentials) {
                 if (!credentials?.email || !credentials?.password) return null;
-
                 const client = await clientPromise;
                 const db = client.db("academicos");
                 const user = await db.collection("users").findOne({ email: credentials.email });
-
                 if (!user) throw new Error("Invalid email or password");
-
+                
                 if (user.lockoutUntil && new Date(user.lockoutUntil) > new Date()) {
                     throw new Error("Account locked due to too many failed attempts.");
                 }
-
                 const isPasswordValid = await bcrypt.compare(credentials.password, user.password_hash);
-
                 if (!isPasswordValid) {
                     const updatedUser = await db.collection("users").findOneAndUpdate(
                         { _id: user._id },
@@ -46,7 +42,6 @@ export const authOptions: NextAuthOptions = {
                         throw new Error("Invalid email or password");
                     }
                 }
-
                 if (user.needs_setup) {
                     throw new Error(JSON.stringify({ 
                         code: "NEEDS_SETUP", 
@@ -54,14 +49,14 @@ export const authOptions: NextAuthOptions = {
                         initials: user.initials || "" 
                     }));
                 }
-
                 return {
                     id: user._id.toString(),
                     email: user.email,
                     name: user.name,
                     role: user.role,
-                    advising_series: user.advising_series, // <-- Updated
+                    advising_series: user.advising_series,
                     department: user.department,
+                    isAdmin: user.isAdmin || false, // <-- NEW
                 };
             },
         }),
@@ -72,13 +67,13 @@ export const authOptions: NextAuthOptions = {
                 const client = await clientPromise;
                 const db = client.db("academicos");
                 const dbUser = await db.collection("users").findOne({ email: token.email });
-
                 if (dbUser) {
                     token.id = dbUser._id.toString();
                     token.role = dbUser.role;
-                    token.advising_series = dbUser.advising_series; // <-- Updated
+                    token.advising_series = dbUser.advising_series;
                     token.department = dbUser.department;
                     token.picture = dbUser.profile_photo_url;
+                    token.isAdmin = dbUser.isAdmin || false; // <-- NEW
                 }
             }
             return token;
@@ -87,9 +82,10 @@ export const authOptions: NextAuthOptions = {
             if (token && session.user) {
                 session.user.id = token.id as string;
                 session.user.role = token.role as string;
-                session.user.advising_series = token.advising_series as string; // <-- Updated
+                session.user.advising_series = token.advising_series as string;
                 session.user.department = token.department as string;
                 session.user.image = token.picture as string;
+                session.user.isAdmin = token.isAdmin as boolean; // <-- NEW
             }
             return session;
         },

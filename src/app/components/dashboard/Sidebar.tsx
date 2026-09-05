@@ -54,13 +54,19 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
     { name: "Student Directory", href: "/dashboard/student-mgmt", icon: Users }
   ];
 
-  // ADDED NEW ADMIN LINKS HERE
+// ADDED NEW ADMIN LINKS HERE
   const adminLinks = [
     { name: "System Overview", href: "/dashboard", icon: LayoutDashboard },
     { name: "Faculty Management", href: "/dashboard/faculty-mgmt", icon: UserCog },
     { name: "User Management", href: "/dashboard/user-mgmt", icon: ShieldAlert },
     { name: "System Logs", href: "/dashboard/logs", icon: Database },
   ];
+
+  // NEW: Filter out the duplicate "System Overview" for multi-role admins 
+  // so they don't get double active links!
+  const displayAdminLinks = user.role === "admin" 
+    ? adminLinks 
+    : adminLinks.filter(link => link.href !== "/dashboard");
 
   // Helper to render link blocks
   const renderLinks = (links: any[], title?: string) => (
@@ -116,25 +122,25 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
           )}
         </div>
 
-        {/* Stacked RBAC Links */}
+ {/* Stacked RBAC Links */}
         {user.role === "student" && renderLinks(studentLinks)}
         
         {(user.role === "faculty" || user.role === "dept_head") && (
           <>
             {renderLinks(facultyBaseLinks, "Faculty Menu")}
-            {/* UNLOCK ADVISOR TOOLS IF ATTRIBUTE EXISTS */}
             {user.advising_series && renderLinks(advisorLinks, `Advisor Tools (Series ${user.advising_series})`)}
           </>
         )}
 
         {user.role === "dept_head" && (
           <>
-            
             {renderLinks(deptHeadLinks, "Head Tools")}
           </>
         )}
 
-        {user.role === "admin" && renderLinks(adminLinks, "Admin Panel")}
+{/* NEW: Admin panel unlocks if role is admin OR if the isAdmin flag is true */}
+        {(user.role === "admin" || user.isAdmin) && renderLinks(displayAdminLinks, "Admin Panel")}
+      
       </div>
 
       {/* User Profile Footer */}

@@ -8,6 +8,7 @@ declare module "next-auth" {
       role: string;
       advising_series?: string;
       department?: string;
+      isAdmin?: boolean;
     } & DefaultSession["user"];
   }
 
@@ -17,6 +18,7 @@ declare module "next-auth" {
     department?: string;
     needs_setup?: boolean;
     initials?: string;
+    isAdmin?: boolean;
   }
 }
 
@@ -27,5 +29,6 @@ declare module "next-auth/jwt" {
     advising_series?: string;
     department?: string;
     picture?: string;
+    isAdmin?: boolean;
   }
 }

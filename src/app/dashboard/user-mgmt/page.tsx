@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ShieldAlert, Unlock, Search, Loader2, Mail, Lock } from "lucide-react";
+import { ShieldAlert, Unlock, Search, Loader2, Mail, Lock, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { useToast } from "@/app/components/ToastProvider";
 
 type User = {
   _id: string;
@@ -10,37 +12,54 @@ type User = {
   role: string;
   series?: string;
   lockoutUntil?: string;
+  isAdmin?: boolean;
 };
 
 export default function UserManagement() {
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
+  
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const { showToast } = useToast();
 
   const fetchUsers = async () => {
     setIsLoading(true);
     const res = await fetch("/api/admin/users");
     if (res.ok) {
-      const data = await res.json();
-      setUsers(data);
+      setUsers(await res.json());
     }
     setIsLoading(false);
   };
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  useEffect(() => { fetchUsers(); }, []);
 
-  const handleUnlock = async (userId: string, name: string) => {
-    if (!confirm(`Unlock account for ${name}?`)) return;
-    
+  const handleAction = async (userId: string, action: string) => {
     const res = await fetch("/api/admin/users", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "unlock", userId }),
+      body: JSON.stringify({ action, userId }),
     });
+    if (res.ok) {
+      showToast("User updated successfully", "success");
+      fetchUsers();
+    } else {
+      showToast("Action failed", "error");
+    }
+  };
 
-    if (res.ok) fetchUsers();
+  const handleDelete = async (userId: string, name: string) => {
+    if (!confirm(`Are you absolutely sure you want to PERMANENTLY delete ${name}? This action cannot be undone.`)) return;
+
+    const res = await fetch(`/api/admin/users?id=${userId}`, { method: "DELETE" });
+    if (res.ok) {
+      showToast(`${name} deleted permanently`, "success");
+      setUsers(prev => prev.filter(u => u._id !== userId));
+    } else {
+      const data = await res.json();
+      showToast(data.error || "Failed to delete user", "error");
+    }
   };
 
   const filteredUsers = users.filter(u => 
@@ -52,7 +71,7 @@ export default function UserManagement() {
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       <div className="mb-8">
         <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white">Master User Directory</h1>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Monitor all accounts and unlock users who trigger the brute-force protection.</p>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Monitor accounts, manage admin privileges, and remove users.</p>
       </div>
 
       {/* Search Bar */}
@@ -86,42 +105,80 @@ export default function UserManagement() {
               <tbody className="divide-y divide-slate-200 dark:divide-white/5">
                 {filteredUsers.map((user) => {
                   const isLocked = user.lockoutUntil && new Date(user.lockoutUntil) > new Date();
-                  
+                  const isMe = user._id === currentUserId;
+                  const isSuperAdmin = user.role === "admin" || user.isAdmin;
+
                   return (
                     <tr key={user._id} className="transition-colors hover:bg-slate-50/50 dark:hover:bg-white/5">
                       <td className="px-6 py-4">
-                        <div className="font-bold text-slate-900 dark:text-white">{user.name}</div>
+                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          {user.name} 
+                          {isMe && <span className="text-[10px] bg-ruet-blue text-white px-2 py-0.5 rounded-full">YOU</span>}
+                        </div>
                         <div className="text-xs font-semibold text-slate-500 capitalize mt-1">
                           {user.role.replace('_', ' ')} {user.series ? `(Series ${user.series})` : ""}
                         </div>
                       </td>
+                      
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                           <Mail size={14} className="text-slate-400" /> {user.email}
                         </div>
                       </td>
+                      
                       <td className="px-6 py-4">
-                        {isLocked ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700 dark:bg-red-500/20 dark:text-red-400">
-                            <Lock size={12} /> Locked Out
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">
-                            Secure
-                          </span>
-                        )}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {isLocked ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700 dark:bg-red-500/20 dark:text-red-400">
+                              <Lock size={12} /> Locked Out
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">
+                              Secure
+                            </span>
+                          )}
+                          {isSuperAdmin && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-bold text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400">
+                              <ShieldCheck size={12} /> Admin Access
+                            </span>
+                          )}
+                        </div>
                       </td>
+                      
                       <td className="px-6 py-4 text-right">
-                        {isLocked ? (
-                          <button 
-                            onClick={() => handleUnlock(user._id, user.name)}
-                            className="inline-flex items-center gap-1 text-xs font-bold text-ruet-blue hover:underline dark:text-ruet-gold"
-                          >
-                            <Unlock size={14} /> Unlock Account
-                          </button>
-                        ) : (
-                          <span className="text-xs text-slate-400">No Action Required</span>
-                        )}
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          {isLocked && !isMe && (
+                            <button 
+                              onClick={() => handleAction(user._id, "unlock")} 
+                              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-ruet-blue hover:bg-slate-100 dark:text-ruet-gold dark:hover:bg-white/5 transition-colors"
+                            >
+                              <Unlock size={14} /> Unlock
+                            </button>
+                          )}
+                          
+                          {!isMe && (
+                            <>
+                              <button 
+                                onClick={() => handleAction(user._id, "toggle_admin")} 
+                                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-500/10 transition-colors"
+                              >
+                                {user.isAdmin ? (
+                                  <><ShieldOff size={14}/> Revoke Admin</>
+                                ) : (
+                                  <><ShieldCheck size={14}/> Make Admin</>
+                                )}
+                              </button>
+                              
+                              <button 
+                                onClick={() => handleDelete(user._id, user.name)} 
+                                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10 transition-colors"
+                              >
+                                <Trash2 size={14} /> Delete
+                              </button>
+                            </>
+                          )}
+                          {isMe && <span className="text-xs text-slate-400 italic">Self-actions disabled</span>}
+                        </div>
                       </td>
                     </tr>
                   );

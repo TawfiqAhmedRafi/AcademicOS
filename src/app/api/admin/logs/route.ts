@@ -3,14 +3,16 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
 
+const checkIsAdmin = (session: any) => session?.user?.role === "admin" || session?.user?.isAdmin;
+
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (session?.user?.role !== "admin") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  if (!checkIsAdmin(session)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
   try {
     const client = await clientPromise;
     const db = client.db("academicos");
-    
+          
     // Fetch the 100 most recent logs
     const logs = await db.collection("system_logs")
       .find({})
