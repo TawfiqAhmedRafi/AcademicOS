@@ -17,7 +17,7 @@ const TIME_PERIODS = [
 ];
 const NUM_PERIODS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
-const ROOMS = ["301", "302", "303", "304", "Seminar", "DSP Lab", "Electronics Lab", "Communication Lab", "Antenna Lab", "Computer Lab", "Machine Lab"];
+const ROOMS = ["301", "302", "303", "304", "Seminar", "DSP Lab", "Electronics Lab", "Communication Lab", "Antenna Lab", "Computer Lab"];
 const TYPES = ["theory", "lab", "project", "thesis", "seminar"];
 const SPAN3_TYPES = ['lab', 'project', 'seminar', 'thesis'];
 
@@ -275,10 +275,17 @@ function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, 
     day: init.day,
     startPeriod: init.startPeriod,
     periodSpan: init.periodSpan || 1,
-    room: init.room || '', // Could be comma-separated if XX
+    room: init.room || '', 
     teachers: init.teachers || [],
-    batchScope: init.batchScope || 'all'
+    batchScope: init.batchScope || 'all',
+    // --- NEW: Split Group State ---
+    isSplit: init.isSplit || false,
+    splitRooms: init.splitRooms || [],
+    splitTeachers: init.splitTeachers || []
   });
+
+  const isSplit = form.courseCode.includes('/');
+  const splitCourses = isSplit ? form.courseCode.split('/').map(c => c.trim()).filter(Boolean) : [];
 
   // Calculate Busy Status for Collision Detection
   const { busyRooms, busyTeachers } = useMemo(() => {
@@ -292,11 +299,11 @@ function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, 
 
       const slotSpan = slot.periodSpan || 1;
       const existingPeriods = Array.from({ length: slotSpan }, (_, i) => slot.startPeriod + i);
-
       const hasTimeOverlap = requestedPeriods.some(p => existingPeriods.includes(p));
+
       if (hasTimeOverlap) {
         if (slot.room && slot.room !== "N/A") {
-          slot.room.split(',').forEach((r: string) => occupiedRooms.add(r.trim()));
+          slot.room.split(/[,/]/).forEach((r: string) => occupiedRooms.add(r.trim()));
         }
         (slot.teachers || []).forEach((t: string) => {
           if (t !== "N/A") occupiedTeachers.add(t);
@@ -306,25 +313,20 @@ function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, 
     return { busyRooms: occupiedRooms, busyTeachers: occupiedTeachers };
   }, [form.day, form.startPeriod, form.periodSpan, allMasterSlots, init._id, isNew]);
 
-  // Handle Type Change -> Auto Span
   useEffect(() => {
     const newSpan = SPAN3_TYPES.includes(form.type) ? 3 : 1;
     setForm(prev => ({ ...prev, periodSpan: newSpan }));
   }, [form.type]);
 
-  // Is Multiple Room Allowed?
-  const isMultiRoom = form.courseCode.includes("XX");
+  const isMultiRoom = form.courseCode.includes("XX") && !isSplit;
 
+  // Generic Handlers
   const handleRoomToggle = (r: string) => {
     if (busyRooms.has(r)) return;
-
     if (isMultiRoom) {
       let currentRooms = form.room ? form.room.split(',').map((x: string) => x.trim()) : [];
-      if (currentRooms.includes(r)) {
-        currentRooms = currentRooms.filter((x: string) => x !== r);
-      } else {
-        currentRooms.push(r);
-      }
+      if (currentRooms.includes(r)) currentRooms = currentRooms.filter((x: string) => x !== r);
+      else currentRooms.push(r);
       setForm({ ...form, room: currentRooms.join(', ') });
     } else {
       setForm({ ...form, room: r });
@@ -334,21 +336,48 @@ function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, 
   const handleTeacherToggle = (t: string) => {
     if (busyTeachers.has(t)) return;
     let current = [...form.teachers];
-    if (current.includes(t)) {
-      current = current.filter((x: string) => x !== t);
-    } else {
-      current.push(t);
-    }
+    if (current.includes(t)) current = current.filter((x: string) => x !== t);
+    else current.push(t);
     setForm({ ...form, teachers: current });
+  };
+
+  // --- NEW: Split Group Handlers ---
+  const handleSplitRoomToggle = (index: number, r: string) => {
+    if (busyRooms.has(r)) return;
+    const newRooms = [...form.splitRooms];
+    newRooms[index] = newRooms[index] === r ? "" : r;
+    setForm({ ...form, splitRooms: newRooms });
+  };
+
+  const handleSplitTeacherToggle = (index: number, t: string) => {
+    if (busyTeachers.has(t)) return;
+    const newT = [...form.splitTeachers];
+    if (!newT[index]) newT[index] = [];
+    if (newT[index].includes(t)) newT[index] = newT[index].filter(x => x !== t);
+    else newT[index].push(t);
+    setForm({ ...form, splitTeachers: newT });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    let finalRoom = form.room;
+    let finalTeachers = form.teachers;
+
+    // Build the master strings so the PDF and global UI look perfect
+    if (isSplit) {
+      finalRoom = form.splitRooms.filter(Boolean).join(' / ');
+      finalTeachers = form.splitTeachers.flat().filter(Boolean);
+    }
+
     onSave({
       ...init,
       ...form,
+      room: finalRoom,
+      teachers: finalTeachers,
       startPeriod: Number(form.startPeriod),
-      periodSpan: Number(form.periodSpan)
+      periodSpan: Number(form.periodSpan),
+      isSplit
     });
   };
 
@@ -364,17 +393,12 @@ function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase">Course Code</label>
-              <input required value={form.courseCode} onChange={e => setForm({...form, courseCode: e.target.value.toUpperCase()})} placeholder="ETE 32XX" className="w-full mt-1 rounded-xl border border-slate-300 bg-white/50 px-4 py-2.5 text-sm focus:border-ruet-blue focus:outline-none dark:border-white/10 dark:bg-black/20 dark:text-white" />
+              <input required value={form.courseCode} onChange={e => setForm({...form, courseCode: e.target.value.toUpperCase()})} placeholder="ETE 32XX or ETE 3212 / ETE 3214" className="w-full mt-1 rounded-xl border border-slate-300 bg-white/50 px-4 py-2.5 text-sm focus:border-ruet-blue focus:outline-none dark:border-white/10 dark:bg-black/20 dark:text-white" />
             </div>
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase">Type</label>
               <div className="mt-1">
-                <DropdownFilter
-                  fullWidth
-                  value={form.type}
-                  onChange={(val) => setForm({ ...form, type: val })}
-                  options={TYPES.map(t => ({ label: t.charAt(0).toUpperCase() + t.slice(1), value: t }))}
-                />
+                <DropdownFilter fullWidth value={form.type} onChange={(val) => setForm({ ...form, type: val })} options={TYPES.map(t => ({ label: t.charAt(0).toUpperCase() + t.slice(1), value: t }))} />
               </div>
             </div>
           </div>
@@ -382,112 +406,149 @@ function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, 
           <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase">Day</label>
-              <div className="mt-1">
-                <DropdownFilter
-                  fullWidth
-                  value={form.day}
-                  onChange={(val) => setForm({ ...form, day: val })}
-                  options={DAYS.map(d => ({ label: d.substring(0, 3), value: d }))}
-                />
-              </div>
+              <div className="mt-1"><DropdownFilter fullWidth value={form.day} onChange={(val) => setForm({ ...form, day: val })} options={DAYS.map(d => ({ label: d.substring(0, 3), value: d }))} /></div>
             </div>
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase">Start Period</label>
-              <div className="mt-1">
-                <DropdownFilter
-                  fullWidth
-                  value={String(form.startPeriod)}
-                  onChange={(val) => setForm({ ...form, startPeriod: Number(val) })}
-                  options={NUM_PERIODS.map(p => ({ label: `P${p}`, value: String(p) }))}
-                />
-              </div>
+              <div className="mt-1"><DropdownFilter fullWidth value={String(form.startPeriod)} onChange={(val) => setForm({ ...form, startPeriod: Number(val) })} options={NUM_PERIODS.map(p => ({ label: `P${p}`, value: String(p) }))} /></div>
             </div>
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase">Duration</label>
-              <div className="mt-1">
-                <DropdownFilter
-                  fullWidth
-                  value={String(form.periodSpan)}
-                  onChange={(val) => setForm({ ...form, periodSpan: Number(val) })}
-                  options={[1, 2, 3].map(p => ({ label: `${p} hr`, value: String(p) }))}
-                />
+              <div className="mt-1"><DropdownFilter fullWidth value={String(form.periodSpan)} onChange={(val) => setForm({ ...form, periodSpan: Number(val) })} options={[1, 2, 3].map(p => ({ label: `${p} hr`, value: String(p) }))} /></div>
+            </div>
+          </div>
+
+          {/* --- SMART RENDER: SPLIT VS GENERIC --- */}
+          {isSplit ? (
+            <div className="space-y-4 pt-2">
+              <div className="flex items-center gap-2 bg-ruet-blue/10 dark:bg-ruet-gold/10 p-3 rounded-xl border border-ruet-blue/20 dark:border-ruet-gold/20">
+                <AlertCircle className="text-ruet-blue dark:text-ruet-gold shrink-0" size={18} />
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                  Divided course detected. Map specific rooms and teachers to each group.
+                </p>
               </div>
-            </div>
-          </div>
+              
+              {splitCourses.map((sc, idx) => (
+                <div key={idx} className="bg-slate-50 dark:bg-white/5 p-4 rounded-xl border border-slate-200 dark:border-white/10 space-y-4">
+                  <h4 className="font-black text-sm text-ruet-blue dark:text-ruet-gold tracking-tight">{sc}</h4>
+                  
+                  {/* Split Room */}
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase mb-2 block">Assigned Room</label>
+                    <div className="flex flex-wrap gap-2">
+                      {ROOMS.map(r => {
+                        const isBusy = busyRooms.has(r);
+                        const isSelectedElsewhere = form.splitRooms.some((sr, i) => i !== idx && sr === r);
+                        const isSelected = form.splitRooms[idx] === r;
+                        const disabled = isBusy || isSelectedElsewhere;
+                        
+                        return (
+                          <button key={r} type="button" onClick={() => handleSplitRoomToggle(idx, r)} disabled={disabled}
+                            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all border ${
+                              disabled ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed dark:bg-slate-800 dark:border-slate-700"
+                              : isSelected ? "bg-ruet-blue text-white border-ruet-blue dark:bg-ruet-gold dark:text-black dark:border-ruet-gold shadow-md"
+                              : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50 dark:bg-black/20 dark:border-white/10 dark:text-slate-300"
+                            }`}
+                          >
+                            {r} {isBusy ? <span className="ml-1 text-[9px] opacity-70">(Busy)</span> : isSelectedElsewhere ? <span className="ml-1 text-[9px] opacity-70">(Used)</span> : ""}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
 
-          {/* ROOM SELECTOR: Detects "XX" in Course Code for Multiple Selection */}
-          <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-xl border border-slate-200 dark:border-white/10">
-            <div className="flex justify-between items-center mb-2">
-              <label className="text-xs font-bold text-slate-500 uppercase">Assign Room {isMultiRoom ? "(Multiple)" : ""}</label>
-              {isMultiRoom && <span className="text-[10px] bg-ruet-blue/10 text-ruet-blue px-2 py-0.5 rounded font-bold dark:bg-ruet-gold/10 dark:text-ruet-gold">"XX" Detected</span>}
+                  {/* Split Teacher */}
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase mb-2 block">Assigned Teachers</label>
+                    <div className="flex flex-wrap gap-2">
+                      {allTeachers.map((t: any) => {
+                        const initInitials = t.initials;
+                        if(!initInitials) return null;
+                        const isBusy = busyTeachers.has(initInitials);
+                        const isSelectedElsewhere = form.splitTeachers.some((st, i) => i !== idx && st.includes(initInitials));
+                        const isSelected = form.splitTeachers[idx]?.includes(initInitials);
+                        const disabled = isBusy || isSelectedElsewhere;
+                        
+                        return (
+                          <button key={initInitials} type="button" onClick={() => handleSplitTeacherToggle(idx, initInitials)} disabled={disabled}
+                            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all border ${
+                              disabled ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed dark:bg-slate-800 dark:border-slate-700"
+                              : isSelected ? "bg-emerald-500 text-white border-emerald-500 dark:bg-emerald-500 dark:text-black dark:border-emerald-500 shadow-md"
+                              : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50 dark:bg-black/20 dark:border-white/10 dark:text-slate-300"
+                            }`}
+                          >
+                            {initInitials} {isBusy ? <span className="ml-1 text-[9px] opacity-70">(Busy)</span> : isSelectedElsewhere ? <span className="ml-1 text-[9px] opacity-70">(Used)</span> : ""}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {ROOMS.map(r => {
-                const isBusy = busyRooms.has(r);
-                const isSelected = isMultiRoom ? form.room?.includes(r) : form.room === r;
-                return (
-                  <button
-                    key={r} type="button" onClick={() => handleRoomToggle(r)} disabled={isBusy}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all border ${
-                      isBusy ? "bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700 cursor-not-allowed"
-                      : isSelected ? "bg-ruet-blue text-white border-ruet-blue dark:bg-ruet-gold dark:text-black dark:border-ruet-gold shadow-md"
-                      : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50 dark:bg-black/20 dark:border-white/10 dark:text-slate-300"
-                    }`}
-                  >
-                    {r} {isBusy && <span className="ml-1 text-[9px] opacity-70">(Busy)</span>}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+          ) : (
+            <>
+              {/* GENERIC ROOM SELECTOR */}
+              <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-xl border border-slate-200 dark:border-white/10">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Assign Room {isMultiRoom ? "(Multiple)" : ""}</label>
+                  {isMultiRoom && <span className="text-[10px] bg-ruet-blue/10 text-ruet-blue px-2 py-0.5 rounded font-bold dark:bg-ruet-gold/10 dark:text-ruet-gold">"XX" Detected</span>}
+                </div>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {ROOMS.map(r => {
+                    const isBusy = busyRooms.has(r);
+                    const isSelected = isMultiRoom ? form.room?.includes(r) : form.room === r;
+                    return (
+                      <button key={r} type="button" onClick={() => handleRoomToggle(r)} disabled={isBusy}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all border ${
+                          isBusy ? "bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700 cursor-not-allowed"
+                          : isSelected ? "bg-ruet-blue text-white border-ruet-blue dark:bg-ruet-gold dark:text-black dark:border-ruet-gold shadow-md"
+                          : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50 dark:bg-black/20 dark:border-white/10 dark:text-slate-300"
+                        }`}
+                      >
+                        {r} {isBusy && <span className="ml-1 text-[9px] opacity-70">(Busy)</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
 
-          {/* TEACHER SELECTOR */}
-          <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-xl border border-slate-200 dark:border-white/10">
-            <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Assign Teachers</label>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {allTeachers.map((t: any) => {
-                const init = t.initials;
-                if(!init) return null;
-                const isBusy = busyTeachers.has(init);
-                const isSelected = form.teachers.includes(init);
-                return (
-                  <button
-                    key={init} type="button" onClick={() => handleTeacherToggle(init)} disabled={isBusy}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all border ${
-                      isBusy ? "bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700 cursor-not-allowed"
-                      : isSelected ? "bg-emerald-500 text-white border-emerald-500 dark:bg-emerald-500 dark:text-black dark:border-emerald-500 shadow-md"
-                      : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50 dark:bg-black/20 dark:border-white/10 dark:text-slate-300"
-                    }`}
-                  >
-                    {init} {isBusy && <span className="ml-1 text-[9px] opacity-70">(Busy)</span>}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+              {/* GENERIC TEACHER SELECTOR */}
+              <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-xl border border-slate-200 dark:border-white/10">
+                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Assign Teachers</label>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {allTeachers.map((t: any) => {
+                    const initInitials = t.initials;
+                    if(!initInitials) return null;
+                    const isBusy = busyTeachers.has(initInitials);
+                    const isSelected = form.teachers.includes(initInitials);
+                    return (
+                      <button key={initInitials} type="button" onClick={() => handleTeacherToggle(initInitials)} disabled={isBusy}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all border ${
+                          isBusy ? "bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700 cursor-not-allowed"
+                          : isSelected ? "bg-emerald-500 text-white border-emerald-500 dark:bg-emerald-500 dark:text-black dark:border-emerald-500 shadow-md"
+                          : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50 dark:bg-black/20 dark:border-white/10 dark:text-slate-300"
+                        }`}
+                      >
+                        {initInitials} {isBusy && <span className="ml-1 text-[9px] opacity-70">(Busy)</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="flex gap-3 pt-4">
             {!isNew && (
-              <button
-                type="button"
-                onClick={() => onDelete(init._id)}
-                disabled={isDeleting || isSaving}
-                className="flex-1 bg-red-50 text-red-600 font-bold py-3 rounded-xl border border-red-200 hover:bg-red-100 dark:bg-red-500/10 dark:border-red-500/20 dark:hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isDeleting ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18}/>}
-                {isDeleting ? "Deleting..." : "Delete"}
+              <button type="button" onClick={() => onDelete(init._id)} disabled={isDeleting || isSaving} className="flex-1 bg-red-50 text-red-600 font-bold py-3 rounded-xl border border-red-200 hover:bg-red-100 dark:bg-red-500/10 dark:border-red-500/20 dark:hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                {isDeleting ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18}/>} {isDeleting ? "Deleting..." : "Delete"}
               </button>
             )}
-            <button
-              type="submit"
-              disabled={isSaving || isDeleting}
-              className="flex-[2] bg-ruet-blue text-white font-bold py-3 rounded-xl hover:bg-blue-900 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400 transition-colors flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18}/>}
-              {isSaving ? "Saving..." : "Save Slot"}
+            <button type="submit" disabled={isSaving || isDeleting} className="flex-[2] bg-ruet-blue text-white font-bold py-3 rounded-xl hover:bg-blue-900 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400 transition-colors flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+              {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18}/>} {isSaving ? "Saving..." : "Save Slot"}
             </button>
           </div>
-
         </form>
       </div>
     </div>
