@@ -54,6 +54,8 @@ export async function PATCH(req: Request) {
 
     const client = await clientPromise;
     const db = client.db("academicos");
+    
+    
 
     // --- TOGGLES & DEADLINES ---
     if (action === "toggle_registration") {
@@ -78,6 +80,16 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ message: "Deadline updated" });
     }
 
+    if (action === "toggle_backlog_registration") {
+      await db.collection("series").updateOne({ series }, { $set: { "backlogRegistration.isOpen": payload.isOpen, updatedAt: new Date() } });
+      await logSystemAction("Backlog Reg Toggled", "System", `Backlog Registration for Series ${series} is now ${payload.isOpen ? 'OPEN' : 'CLOSED'}`);
+      return NextResponse.json({ message: "Backlog Registration status updated" });
+    }
+
+    if (action === "set_backlog_deadline") {
+      await db.collection("series").updateOne({ series }, { $set: { "backlogRegistration.deadline": payload.deadline, updatedAt: new Date() } });
+      return NextResponse.json({ message: "Backlog Deadline updated" });
+    }
     // --- BULK APPROVALS ---
     if (action === "bulk_approve_reg") {
       await db.collection("users").updateMany(

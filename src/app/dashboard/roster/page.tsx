@@ -13,6 +13,7 @@ import {
   CheckCheck,
   FileText,
   BookOpen,
+  AlertCircle // <-- Make sure AlertCircle is imported!
 } from "lucide-react";
 import { useToast } from "@/app/components/ToastProvider";
 import DropdownFilter from "@/app/components/DropdownFilter";
@@ -24,6 +25,7 @@ type SeriesConfig = {
   currentSemester: string;
   registration: { isOpen: boolean; deadline: string | null };
   formFillup?: { isOpen: boolean; deadline: string | null };
+  backlogRegistration?: { isOpen: boolean; deadline: string | null };
 };
 
 type Student = {
@@ -235,7 +237,7 @@ export default function SeriesRosterPage() {
 
       {activeConfig && (
         <div className="space-y-8 animate-in fade-in duration-300">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             {/* Course Registration Control Box */}
             <div className="glass-panel rounded-3xl p-6 border-l-4 border-l-ruet-blue dark:border-l-ruet-gold flex flex-col justify-between">
               <div>
@@ -283,7 +285,7 @@ export default function SeriesRosterPage() {
               </button>
             </div>
 
-            {/* Form Fill-up Control Box - Updated to Emerald to compliment RUET UI */}
+            {/* Form Fill-up Control Box */}
             <div className="glass-panel rounded-3xl p-6 border-l-4 border-l-emerald-500 dark:border-l-emerald-400 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-4">
@@ -327,6 +329,39 @@ export default function SeriesRosterPage() {
                 }`}
               >
                 {formFillup.isOpen ? "Lock Form Fill-up" : "Open Form Fill-up"}
+              </button>
+            </div>
+
+            {/* Backlog Registration Control Box */}
+            <div className="glass-panel rounded-3xl p-6 border-l-4 border-l-amber-500 dark:border-l-amber-400 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 font-bold uppercase text-xs tracking-wider">
+                    <AlertCircle size={16} /> Backlog Exams
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-black ${activeConfig.backlogRegistration?.isOpen ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400" : "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400"}`}>
+                    {activeConfig.backlogRegistration?.isOpen ? "OPEN" : "LOCKED"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mb-6">
+                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Deadline:</span>
+                  <input 
+                    type="date" 
+                    value={activeConfig.backlogRegistration?.deadline || ""}
+                    onChange={(e) => handleAction(activeConfig.series, "set_backlog_deadline", { deadline: e.target.value })}
+                    className="flex-1 rounded-lg border border-slate-300 bg-white/50 px-3 py-1.5 text-sm focus:border-amber-500 focus:outline-none dark:border-white/10 dark:bg-black/20 dark:text-white"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={() => handleAction(activeConfig.series, "toggle_backlog_registration", { isOpen: !activeConfig.backlogRegistration?.isOpen })}
+                className={`w-full py-2.5 px-4 rounded-xl font-bold text-sm transition-all shadow-sm ${
+                  activeConfig.backlogRegistration?.isOpen
+                    ? "bg-white text-red-600 hover:bg-red-50 border border-red-200 dark:bg-transparent dark:text-red-400 dark:border-red-500/30 dark:hover:bg-red-500/10"
+                    : "bg-amber-500 text-white hover:bg-amber-600 dark:bg-amber-500 dark:hover:bg-amber-600"
+                }`}
+              >
+                {activeConfig.backlogRegistration?.isOpen ? "Lock Backlogs" : "Open Backlogs"}
               </button>
             </div>
           </div>
@@ -397,7 +432,7 @@ export default function SeriesRosterPage() {
                       </div>
                     </th>
 
-                    {/* Form Fill-up Column with Bulk Action - Updated to Emerald */}
+                    {/* Form Fill-up Column with Bulk Action */}
                     <th className="px-6 py-3 font-semibold text-slate-600 dark:text-slate-300 bg-emerald-50/50 dark:bg-emerald-900/10 border-l border-white dark:border-slate-800">
                       <div className="flex flex-col gap-2">
                         <span className="text-xs uppercase tracking-wider text-emerald-600 dark:text-emerald-400">

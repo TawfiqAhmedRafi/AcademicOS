@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, Clock, GraduationCap, CheckSquare, FileText } from "lucide-react";
+import { BookOpen, Clock, GraduationCap, CheckSquare, FileText, AlertCircle } from "lucide-react";
 import { StatCard, AlertBanner } from "../Widgets";
 
 export default function StudentView({ user }: { user: any }) {
@@ -27,6 +27,10 @@ export default function StudentView({ user }: { user: any }) {
             <Link href="/dashboard/registration" className="flex w-full items-center justify-between rounded-xl bg-white/50 p-4 transition-colors hover:bg-white/80 dark:bg-white/5 dark:hover:bg-white/10">
               <span className="font-semibold text-slate-700 dark:text-slate-200">Start Course Registration</span>
               <CheckSquare size={18} className="text-slate-400" />
+            </Link>
+            <Link href="/dashboard/backlog-registration" className="flex w-full items-center justify-between rounded-xl bg-white/50 p-4 transition-colors hover:bg-white/80 dark:bg-white/5 dark:hover:bg-white/10">
+              <span className="font-semibold text-slate-700 dark:text-slate-200">Backlog Registration</span>
+              <AlertCircle size={18} className="text-amber-500" />
             </Link>
             <Link href="/dashboard/results" className="flex w-full items-center justify-between rounded-xl bg-white/50 p-4 transition-colors hover:bg-white/80 dark:bg-white/5 dark:hover:bg-white/10">
               <span className="font-semibold text-slate-700 dark:text-slate-200">View Result Sheet</span>

@@ -32,6 +32,7 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
   const studentLinks = [
     { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
     { name: "Course Registration", href: "/dashboard/registration", icon: BookOpen },
+    { name: "Backlog Registration", href: "/dashboard/backlog-registration", icon: ShieldAlert },
     { name: "Form Fill-up", href: "/dashboard/form-fillup", icon: FileText },
     { name: "Academic Results", href: "/dashboard/results", icon: GraduationCap },
     { name: "Class Routine", href: "/dashboard/routine", icon: Calendar },
