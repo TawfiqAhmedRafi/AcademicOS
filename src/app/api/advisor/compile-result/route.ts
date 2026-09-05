@@ -80,40 +80,77 @@ export async function POST(req: Request) {
       let totalGradePoints = 0;
       let totalEarnedCredits = 0;
 
-      // HELPER: Processes a single course, automatically carrying forward old marks
+      // SMART ENGINE: Processes a single course, automatically handling Backlog carry-forward
       const processCourse = (courseId: string, isBacklog: boolean) => {
         const course = courses.find(c => c._id.toString() === courseId);
         if (!course) return;
 
-        const courseUploads = allMarks.filter(m => m.courseCode === course.courseCode);
+        // Extract ONLY uploads containing this specific student's roll
+        const studentUploads = allMarks.filter(m => m.courseCode === course.courseCode && m.marks?.some((sm: any) => sm.roll === roll));
         
-        // Group by segment and take the LATEST upload (Perfect for Backlog carry-forward)
-        const latestUploadsBySegment: Record<string, any> = {};
-        courseUploads.forEach(upload => {
-          const existing = latestUploadsBySegment[upload.segment];
-          if (!existing || new Date(upload.uploadedAt) > new Date(existing.uploadedAt)) {
-            latestUploadsBySegment[upload.segment] = upload;
-          }
-        });
+        // Segregate Continuous Assessment from Terminal Exams
+        const continuousUploads = studentUploads.filter(u => !u.segment.includes("Final") && !u.segment.includes("Viva") && !u.segment.includes("Defense") && !u.segment.includes("Showcase"));
+        const terminalUploads = studentUploads.filter(u => u.segment.includes("Final") || u.segment.includes("Viva") || u.segment.includes("Defense") || u.segment.includes("Showcase"));
 
         let courseTotal = 0;
         let ctMarksCollector: number[] = [];
 
-        Object.values(latestUploadsBySegment).forEach((upload: any) => {
-          const studentMarkData = upload.marks?.find((m: any) => m.roll === roll);
-          if (!studentMarkData) return;
+        // 1. PROCESS CONTINUOUS ASSESSMENTS (Automatically carries forward the old marks for backlogs!)
+        const latestContinuous: Record<string, any> = {};
+        continuousUploads.forEach(u => {
+            const key = `${u.segment}_${u.teacherEmail}`;
+            if (!latestContinuous[key] || new Date(u.uploadedAt) > new Date(latestContinuous[key].uploadedAt)) {
+                latestContinuous[key] = u;
+            }
+        });
 
-          if (upload.segment.includes("Class Tests")) {
-            if (studentMarkData.ct1 !== undefined) ctMarksCollector.push(studentMarkData.ct1);
-            if (studentMarkData.ct2 !== undefined) ctMarksCollector.push(studentMarkData.ct2);
-            if (studentMarkData.ct3 !== undefined) ctMarksCollector.push(studentMarkData.ct3);
-            if (studentMarkData.ct4 !== undefined) ctMarksCollector.push(studentMarkData.ct4);
-          } else {
-            courseTotal += studentMarkData.mark || 0;
-          }
+        Object.values(latestContinuous).forEach((upload: any) => {
+            const mData = upload.marks.find((m:any) => m.roll === roll);
+            if (upload.segment.includes("Class Tests")) {
+                if (mData.ct1 !== undefined) ctMarksCollector.push(mData.ct1);
+                if (mData.ct2 !== undefined) ctMarksCollector.push(mData.ct2);
+                if (mData.ct3 !== undefined) ctMarksCollector.push(mData.ct3);
+                if (mData.ct4 !== undefined) ctMarksCollector.push(mData.ct4);
+            } else {
+                courseTotal += mData.mark || 0;
+            }
         });
 
         courseTotal += calculateCTMarks(ctMarksCollector);
+
+        // 2. PROCESS TERMINAL EXAMS (Semester Finals)
+        const sortedTerminal = terminalUploads.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+        
+        if (isBacklog && sortedTerminal.length > 0) {
+            // BACKLOG INTERCEPTOR: Ignore the old failed terminal exam. 
+            // Establish the new exam period based on the most recent terminal upload.
+            const backlogPeriodDate = new Date(sortedTerminal[0].uploadedAt);
+            const validTerminalUploads = sortedTerminal.filter(u => 
+                (backlogPeriodDate.getTime() - new Date(u.uploadedAt).getTime()) < (30 * 24 * 60 * 60 * 1000) // Within 30 days
+            );
+            
+            const latestTerminal: Record<string, any> = {};
+            validTerminalUploads.forEach(u => {
+                const key = `${u.segment}_${u.teacherEmail}`;
+                if (!latestTerminal[key] || new Date(u.uploadedAt) > new Date(latestTerminal[key].uploadedAt)) latestTerminal[key] = u;
+            });
+
+            Object.values(latestTerminal).forEach((upload: any) => {
+                courseTotal += upload.marks.find((m:any) => m.roll === roll).mark || 0;
+            });
+
+        } else {
+            // REGULAR PROCESSING
+            const latestTerminal: Record<string, any> = {};
+            sortedTerminal.forEach(u => {
+                const key = `${u.segment}_${u.teacherEmail}`;
+                if (!latestTerminal[key] || new Date(u.uploadedAt) > new Date(latestTerminal[key].uploadedAt)) latestTerminal[key] = u;
+            });
+            Object.values(latestTerminal).forEach((upload: any) => {
+                courseTotal += upload.marks.find((m:any) => m.roll === roll).mark || 0;
+            });
+        }
+
         const gradeScale = getGradeScale(courseTotal, isBacklog);
 
         const resultObj = {
@@ -163,9 +200,8 @@ export async function POST(req: Request) {
       let cumulativePoints = totalGradePoints;
       let cumulativeCredits = totalEarnedCredits;
 
-      // Add previous semesters
       (student.academicHistory || []).forEach((hist: any) => {
-        cumulativePoints += (hist.semesterGpa * hist.earnedCredits);
+        cumulativePoints += (hist.semesterGpa * hist.earnedCredits); // Recover total grade points for that semester
         cumulativeCredits += hist.earnedCredits;
       });
 
@@ -175,7 +211,7 @@ export async function POST(req: Request) {
           cumulativePoints += (bg.credits * bg.gradePoint);
           cumulativeCredits += bg.credits;
         } else {
-          studentResult.failedCourses.push(bg.courseCode); // Still failing
+          studentResult.failedCourses.push(bg.courseCode); 
         }
       });
 
