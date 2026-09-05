@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Search, Loader2, UserMinus, GraduationCap, ArrowDownRight, XCircle } from "lucide-react";
 import { useToast } from "@/app/components/ToastProvider";
+import Swal from "sweetalert2";
 
 type Student = {
   _id: string;
@@ -39,7 +40,17 @@ export default function StudentManagementPage() {
     e.preventDefault();
     if (!dropModal || !newSeries) return;
 
-    if (!confirm(`WARNING: You are transferring ${dropModal.name} from Series ${dropModal.series} to Series ${newSeries}. This will instantly move them to a new Advisor's roster. Proceed?`)) return;
+const result = await Swal.fire({
+  title: "Transfer Student?",
+  text: `WARNING: You are transferring ${dropModal.name} from Series ${dropModal.series} to Series ${newSeries}. This will instantly move them to a new Advisor's roster. Proceed?`,
+  icon: "warning",
+  showCancelButton: true,
+  confirmButtonText: "Yes, transfer",
+  cancelButtonText: "Cancel",
+  reverseButtons: true,
+});
+
+if (!result.isConfirmed) return;
 
     setIsSubmitting(true);
     const res = await fetch("/api/head/students", {

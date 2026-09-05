@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import DropdownFilter from "@/app/components/DropdownFilter";
 import { useToast } from "@/app/components/ToastProvider";
+import Swal from "sweetalert2";
 type Advisor = { email: string; name: string };
 
 type Series = {
@@ -110,8 +111,18 @@ export default function SeriesManagerPage() {
     );
     const nextSem = semesterOptions[currentIndex + 1]?.value;
 
-    if (!confirm(`Promote Series ${seriesName} to Semester ${nextSem}?`))
-      return;
+    const result = await Swal.fire({
+  title: "Promote Series?",
+  text: `Promote Series ${seriesName} to Semester ${nextSem}?`,
+  icon: "question",
+  showCancelButton: true,
+  confirmButtonText: "Yes, promote",
+  cancelButtonText: "Cancel",
+  reverseButtons: true,
+});
+
+if (!result.isConfirmed) return;
+     
 
     const res = await fetch("/api/head/series", {
       method: "PATCH",
@@ -127,12 +138,17 @@ export default function SeriesManagerPage() {
   };
 
   const handleGraduateSeries = async (seriesId: string, seriesName: string) => {
-    if (
-      !confirm(
-        `Are you sure you want to graduate Series ${seriesName}? This will archive the batch.`,
-      )
-    )
-      return;
+const result = await Swal.fire({
+  title: "Graduate Series?",
+  text: `Are you sure you want to graduate Series ${seriesName}? This will archive the batch.`,
+  icon: "warning",
+  showCancelButton: true,
+  confirmButtonText: "Yes, graduate",
+  cancelButtonText: "Cancel",
+  reverseButtons: true,
+});
+
+if (!result.isConfirmed) return;
 
     const res = await fetch("/api/head/series", {
       method: "PATCH",
