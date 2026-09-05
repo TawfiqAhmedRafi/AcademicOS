@@ -3,27 +3,34 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
 
-// RUET Grade Mapping Logic
-function getGradeScale(totalMarks: number) {
+// RUET Grade Mapping & Cap Logic
+function getGradeScale(totalMarks: number, isBacklog: boolean = false) {
   const rounded = Math.round(totalMarks);
-  if (rounded >= 80) return { letter: "A+", point: 4.0 };
-  if (rounded >= 75) return { letter: "A", point: 3.75 };
-  if (rounded >= 70) return { letter: "A-", point: 3.5 };
-  if (rounded >= 65) return { letter: "B+", point: 3.25 };
-  if (rounded >= 60) return { letter: "B", point: 3.0 };
-  if (rounded >= 55) return { letter: "B-", point: 2.75 };
-  if (rounded >= 50) return { letter: "C+", point: 2.5 };
-  if (rounded >= 45) return { letter: "C", point: 2.25 };
-  if (rounded >= 40) return { letter: "D", point: 2.0 };
-  return { letter: "F", point: 0.0 };
+  let letter = "F";
+  let point = 0.0;
+
+  if (rounded >= 80) { letter = "A+"; point = 4.0; }
+  else if (rounded >= 75) { letter = "A"; point = 3.75; }
+  else if (rounded >= 70) { letter = "A-"; point = 3.5; }
+  else if (rounded >= 65) { letter = "B+"; point = 3.25; }
+  else if (rounded >= 60) { letter = "B"; point = 3.0; }
+  else if (rounded >= 55) { letter = "B-"; point = 2.75; }
+  else if (rounded >= 50) { letter = "C+"; point = 2.5; }
+  else if (rounded >= 45) { letter = "C"; point = 2.25; }
+  else if (rounded >= 40) { letter = "D"; point = 2.0; }
+
+  // THE BACKLOG INTERCEPTOR: Hard cap at B+ (3.25)
+  if (isBacklog && point > 3.25) {
+    return { letter: "B+", point: 3.25 };
+  }
+
+  return { letter, point };
 }
 
-// Math Helper: Best 3 Average out of N Class Tests
+// Math Helper: Best 3 Average
 function calculateCTMarks(ctMarksArray: number[]) {
   if (ctMarksArray.length === 0) return 0;
-  // Sort descending
   const sorted = ctMarksArray.sort((a, b) => b - a);
-  // Take top 3 (or less if fewer were taken)
   const top3 = sorted.slice(0, 3);
   const sum = top3.reduce((acc, val) => acc + val, 0);
   return Number((sum / top3.length).toFixed(2));
@@ -38,22 +45,25 @@ export async function POST(req: Request) {
     const client = await clientPromise;
     const db = client.db("academicos");
 
-    // 1. Fetch all students cleared for this semester
+    // Fetch students who are doing Regular Exams OR Backlog Exams
     const students = await db.collection("users").find({
       role: "student",
       series: String(series),
-      formFillupStatus: "approved"
+      $or: [
+        { formFillupStatus: "approved" },
+        { backlogRegStatus: "approved" }
+      ]
     }).toArray();
 
     if (students.length === 0) return NextResponse.json({ error: "No cleared students found." }, { status: 400 });
 
-    // 2. Fetch the Curriculum and the Uploaded Marks
-    const courses = await db.collection("courses").find({ semester }).toArray();
+    // Fetch ALL courses (since backlogs can be from previous semesters)
+    const courses = await db.collection("courses").find({}).toArray();
     const allMarks = await db.collection("course_marks").find({ series: Number(series) }).toArray();
 
     const compiledResults = [];
 
-    // 3. Process Each Student
+    // Process Each Student
     for (const student of students) {
       const roll = student.studentId || student.email.split('@')[0];
       const studentResult: any = {
@@ -61,6 +71,7 @@ export async function POST(req: Request) {
         roll,
         name: student.name,
         courseGrades: [],
+        backlogGrades: [],
         semesterGpa: 0,
         earnedCredits: 0,
         failedCourses: []
@@ -69,22 +80,29 @@ export async function POST(req: Request) {
       let totalGradePoints = 0;
       let totalEarnedCredits = 0;
 
-      // 4. Process Each Registered Course
-      for (const courseId of (student.registeredCourses || [])) {
+      // HELPER: Processes a single course, automatically carrying forward old marks
+      const processCourse = (courseId: string, isBacklog: boolean) => {
         const course = courses.find(c => c._id.toString() === courseId);
-        if (!course) continue;
+        if (!course) return;
 
-        // Extract all marks uploaded by any teacher for this specific course & student
         const courseUploads = allMarks.filter(m => m.courseCode === course.courseCode);
         
+        // Group by segment and take the LATEST upload (Perfect for Backlog carry-forward)
+        const latestUploadsBySegment: Record<string, any> = {};
+        courseUploads.forEach(upload => {
+          const existing = latestUploadsBySegment[upload.segment];
+          if (!existing || new Date(upload.uploadedAt) > new Date(existing.uploadedAt)) {
+            latestUploadsBySegment[upload.segment] = upload;
+          }
+        });
+
         let courseTotal = 0;
         let ctMarksCollector: number[] = [];
 
-        courseUploads.forEach(upload => {
+        Object.values(latestUploadsBySegment).forEach((upload: any) => {
           const studentMarkData = upload.marks?.find((m: any) => m.roll === roll);
           if (!studentMarkData) return;
 
-          // Merge CTs for Averaging (handles both 1-teacher 4-CTs and 2-teacher 2-CTs seamlessly)
           if (upload.segment.includes("Class Tests")) {
             if (studentMarkData.ct1 !== undefined) ctMarksCollector.push(studentMarkData.ct1);
             if (studentMarkData.ct2 !== undefined) ctMarksCollector.push(studentMarkData.ct2);
@@ -96,47 +114,75 @@ export async function POST(req: Request) {
         });
 
         courseTotal += calculateCTMarks(ctMarksCollector);
-        
-        const gradeScale = getGradeScale(courseTotal);
+        const gradeScale = getGradeScale(courseTotal, isBacklog);
 
-        studentResult.courseGrades.push({
+        const resultObj = {
           courseCode: course.courseCode,
           credits: course.credits,
           totalMarks: courseTotal,
           letterGrade: gradeScale.letter,
-          gradePoint: gradeScale.point
-        });
+          gradePoint: gradeScale.point,
+          isBacklog
+        };
 
-        // 5. Apply the Specific Exclude-Failed-Credits Rule
-        if (gradeScale.point > 0) {
-          totalEarnedCredits += course.credits;
-          totalGradePoints += (course.credits * gradeScale.point);
+        if (isBacklog) {
+          studentResult.backlogGrades.push(resultObj);
         } else {
-          studentResult.failedCourses.push(course.courseCode);
+          studentResult.courseGrades.push(resultObj);
+          // Standard Rule: Failed courses don't penalize the current semester GPA
+          if (gradeScale.point > 0) {
+            totalEarnedCredits += course.credits;
+            totalGradePoints += (course.credits * gradeScale.point);
+          } else {
+            studentResult.failedCourses.push(course.courseCode);
+          }
+        }
+      };
+
+      // A. Process Regular Courses
+      if (student.formFillupStatus === "approved") {
+        for (const courseId of (student.registeredCourses || [])) {
+          processCourse(courseId, false);
         }
       }
 
-      // 6. Semester GPA Calculation (Denominator completely ignores failed credits)
+      // B. Process Backlog Courses
+      if (student.backlogRegStatus === "approved") {
+        for (const courseId of (student.registeredBacklogs || [])) {
+          processCourse(courseId, true);
+        }
+      }
+
+      // C. Term GPA Calculation
       if (totalEarnedCredits > 0) {
         studentResult.semesterGpa = Number((totalGradePoints / totalEarnedCredits).toFixed(2));
       }
       studentResult.earnedCredits = totalEarnedCredits;
 
-      // 7. CGPA Calculation (Merging with academic history)
+      // D. Cumulative CGPA Logic
       let cumulativePoints = totalGradePoints;
       let cumulativeCredits = totalEarnedCredits;
 
+      // Add previous semesters
       (student.academicHistory || []).forEach((hist: any) => {
-        cumulativePoints += (hist.gpa * hist.earnedCredits);
+        cumulativePoints += (hist.semesterGpa * hist.earnedCredits);
         cumulativeCredits += hist.earnedCredits;
       });
 
-      studentResult.cgpa = cumulativeCredits > 0 ? Number((cumulativePoints / cumulativeCredits).toFixed(2)) : 0;
+      // Integrate newly passed backlogs into the global CGPA
+      studentResult.backlogGrades.forEach((bg: any) => {
+        if (bg.gradePoint > 0) {
+          cumulativePoints += (bg.credits * bg.gradePoint);
+          cumulativeCredits += bg.credits;
+        } else {
+          studentResult.failedCourses.push(bg.courseCode); // Still failing
+        }
+      });
 
+      studentResult.cgpa = cumulativeCredits > 0 ? Number((cumulativePoints / cumulativeCredits).toFixed(2)) : 0;
       compiledResults.push(studentResult);
     }
 
-    // 8. Save to Drafts for Head's Approval
     const draftPayload = {
       series: Number(series),
       semester,
@@ -158,6 +204,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Failed to compile results" }, { status: 500 });
   }
 }
+
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.advising_series) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
@@ -167,15 +214,9 @@ export async function GET(req: Request) {
     const series = searchParams.get("series");
     const semester = searchParams.get("semester");
 
-    if (!series || !semester) return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
-
     const client = await clientPromise;
     const db = client.db("academicos");
-
-    const draft = await db.collection("draft_results").findOne({ 
-      series: Number(series), 
-      semester 
-    });
+    const draft = await db.collection("draft_results").findOne({ series: Number(series), semester });
 
     return NextResponse.json({ draft });
   } catch (error) {
@@ -199,7 +240,6 @@ export async function PATCH(req: Request) {
       );
       return NextResponse.json({ message: "Draft successfully sent to the Department Head." });
     }
-
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (error) {
     return NextResponse.json({ error: "Server error" }, { status: 500 });

@@ -43,32 +43,34 @@ export async function PATCH(req: Request) {
         const passedCourses = res.courseGrades.filter((c: any) => c.gradePoint > 0).map((c: any) => c.courseCode);
         const failedCourses = res.failedCourses || [];
 
-        return {
+       return {
           updateOne: {
             filter: { _id: new ObjectId(res.studentId) },
             update: {
-              // Stamp the permanent transcript
+              // Stamp the permanent transcript (combining regular and backlog grades for the record)
               $push: {
                 academicHistory: {
                   semester: draft.semester,
                   publishedAt: new Date(),
                   semesterGpa: res.semesterGpa,
                   earnedCredits: res.earnedCredits,
-                  courses: res.courseGrades
+                  courses: [...res.courseGrades, ...res.backlogGrades]
                 }
               },
-              // Update CGPA and wipe their gates clean for the next semester
+              // Update CGPA and wipe ALL registration gates clean for the next semester
               $set: {
                 cgpa: res.cgpa,
                 registrationStatus: "unregistered",
                 formFillupStatus: "unregistered",
-                registeredCourses: []
+                registeredCourses: [],
+                backlogRegStatus: "unregistered", 
+                registeredBacklogs: [] 
               },
               // ADD new backlogs to their profile
               $addToSet: {
                 activeBacklogs: { $each: failedCourses }
               },
-              // REMOVE courses from backlogs if they finally passed them
+              // REMOVE courses from active backlogs if they finally passed them
               $pull: {
                 activeBacklogs: { $in: passedCourses } 
               }
