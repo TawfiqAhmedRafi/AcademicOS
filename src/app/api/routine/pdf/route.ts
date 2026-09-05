@@ -11,18 +11,21 @@ export async function GET(req: NextRequest) {
 
     // 1. Fetch active series, matching slots, and all faculty in parallel for max performance
     const activeSeries = await db.collection("series").find({ status: "active" }).toArray();
-    
+
     const orConditions = activeSeries.map(s => ({
       series: Number(s.series),
       semester: s.currentSemester
     }));
 
     const [activeSlots, facultyList] = await Promise.all([
-      orConditions.length > 0 
+      orConditions.length > 0
         ? db.collection("routine_slots").find({ $or: orConditions }).toArray()
         : Promise.resolve([]),
       db.collection("users")
-        .find({ role: { $in: ["faculty", "advisor", "dept_head"] } })
+        .find({
+          role: { $in: ["faculty", "advisor", "dept_head"] },
+          isAvailable: { $ne: false } // <-- NEW: Excludes "On Leave" teachers 
+        })
         .project({ name: 1, initials: 1, designation: 1, role: 1 })
         .toArray()
     ]);

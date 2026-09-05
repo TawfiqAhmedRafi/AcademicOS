@@ -6,7 +6,6 @@ import bcrypt from "bcryptjs";
 import { ObjectId } from "mongodb";
 import { logSystemAction } from "@/lib/logger";
 
-// Academic Rank weights for sorting (Lower number = higher in the list)
 const rankWeights: Record<string, number> = {
   "Professor": 1,
   "Associate Professor": 2,
@@ -14,13 +13,11 @@ const rankWeights: Record<string, number> = {
   "Lecturer": 4,
 };
 
-// Helper to check for Admin OR Multi-role Admin (isAdmin flag)
 const checkIsAdmin = (session: any) => session?.user?.role === "admin" || session?.user?.isAdmin;
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   
-  // FIX: Use the new checkIsAdmin helper
   if (!checkIsAdmin(session)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
   try {
@@ -32,7 +29,6 @@ export async function GET(req: Request) {
       .project({ password_hash: 0 }) 
       .toArray();
 
-    // Sort: Dept Head first, then by Academic Rank
     faculties.sort((a, b) => {
       if (a.role === "dept_head" && b.role !== "dept_head") return -1;
       if (b.role === "dept_head" && a.role !== "dept_head") return 1;
@@ -51,7 +47,6 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   
-  // FIX: Use the new checkIsAdmin helper
   if (!checkIsAdmin(session)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
   try {
@@ -76,11 +71,11 @@ export async function POST(req: Request) {
       loginAttempts: 0,
       createdAt: new Date(),
       designation,
+      isAvailable: true, // <-- NEW: Default to true
     };
 
     await db.collection("users").insertOne(newUser);
 
-    // FIX: Moved logSystemAction inside the try block for safety
     await logSystemAction(
       "New faculty account provisioned", 
       "Audit", 
@@ -96,7 +91,6 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   const session = await getServerSession(authOptions);
   
-  // FIX: Use the new checkIsAdmin helper
   if (!checkIsAdmin(session)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
   try {
@@ -105,20 +99,36 @@ export async function PATCH(req: Request) {
     const db = client.db("academicos");
     const adminEmail = session?.user?.email || "System Admin";
 
+    // --- NEW: Toggle Availability ---
+    if (action === "toggle_availability") {
+      const targetUser = await db.collection("users").findOne({ _id: new ObjectId(userId) });
+      const newStatus = targetUser?.isAvailable === false ? true : false;
+      
+      await db.collection("users").updateOne(
+        { _id: new ObjectId(userId) },
+        { $set: { isAvailable: newStatus } }
+      );
+
+      await logSystemAction(
+        "Faculty Availability Toggled", 
+        "Audit", 
+        `Admin (${adminEmail}) marked ${targetUser?.name} as ${newStatus ? 'Available' : 'On Leave'}`
+      );
+
+      return NextResponse.json({ message: `Status updated successfully` });
+    }
+
     if (action === "promote_head") {
-      // Demote current head back to standard faculty (we don't know if they were an advisor, so default to faculty)
       await db.collection("users").updateOne(
         { role: "dept_head" },
         { $set: { role: "faculty" } }
       );
 
-      // Promote new head
       await db.collection("users").updateOne(
         { _id: new ObjectId(userId) },
         { $set: { role: newRole } }
       );
 
-      // FIX: Moved logSystemAction inside the try block
       await logSystemAction(
         "Department Head Reassigned", 
         "Audit", 
@@ -129,13 +139,11 @@ export async function PATCH(req: Request) {
     }
       
     if (action === "update_designation") {
-      // Progressive Rank Upgrade
       await db.collection("users").updateOne(
         { _id: new ObjectId(userId) },
         { $set: { designation: newDesignation } }
       );
 
-      // Log the promotion
       await logSystemAction(
         "Faculty Designation Updated", 
         "Audit", 

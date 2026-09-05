@@ -6,9 +6,12 @@ export async function GET() {
     const client = await clientPromise;
     const db = client.db("academicos");
 
-    // Fetch basic public info for the PDF sidebar
+// Replace the db.collection("users").find(...) block with:
     const faculty = await db.collection("users")
-      .find({ role: { $in: ["faculty", "advisor", "dept_head"] } })
+      .find({ 
+        role: { $in: ["faculty", "advisor", "dept_head"] },
+        isAvailable: { $ne: false } // <-- NEW: Excludes "On Leave" teachers
+      })
       .project({ name: 1, initials: 1, designation: 1, role: 1 })
       .toArray();
 
