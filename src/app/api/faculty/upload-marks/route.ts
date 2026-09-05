@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
 
     for (const row of data as any[]) {
       const roll = row["Roll Number"]?.toString().trim();
-      if (!roll || roll === "No approved students yet") continue;
+      if (!roll || roll === "No approved students") continue;
 
       let markData: any = { roll };
 

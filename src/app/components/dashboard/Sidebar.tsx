@@ -8,7 +8,8 @@ import { useTheme } from "next-themes";
 import { 
   LayoutDashboard, BookOpen, FileText, GraduationCap, Calendar, 
   UploadCloud, ShieldAlert, Users, CheckSquare, Network, BarChart3, 
-  Database, UserCog, LogOut, Briefcase, Sun, Moon
+  Database, UserCog, LogOut, Briefcase, Sun, Moon,
+  Calculator
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -45,12 +46,14 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
 
   const advisorLinks = [
     { name: "Series Roster", href: "/dashboard/roster", icon: Users },
+    { name: "Tabulation Engine", href: "/dashboard/tabulation", icon: Calculator },
     { name: "Pending Approvals", href: "/dashboard/approvals", icon: CheckSquare },
   ];
 
   const deptHeadLinks = [
     { name: "Series Manager", href: "/dashboard/series-manager", icon: Network },
     { name: "Routine Builder", href: "/dashboard/routine-builder", icon: BookOpen },
+    { name: "Result Approvals", href: "/dashboard/head-results", icon: CheckSquare },
     { name: "Student Directory", href: "/dashboard/student-mgmt", icon: Users }
   ];
 

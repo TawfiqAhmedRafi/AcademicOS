@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
     });
 
     if (excelData.length === 0) {
-       const dummyRow: any = { "Roll Number": "No approved students yet" };
+       const dummyRow: any = { "Roll Number": "No approved students" };
        headers.slice(1).forEach(h => dummyRow[h] = "");
        excelData.push(dummyRow);
     }
