@@ -47,3 +47,4 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 routine_slots_export.json
+usercollection.json

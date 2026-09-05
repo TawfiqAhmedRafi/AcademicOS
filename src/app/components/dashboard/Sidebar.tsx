@@ -50,8 +50,8 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
 
   const deptHeadLinks = [
     { name: "Series Manager", href: "/dashboard/series-manager", icon: Network },
-    { name: "Routine Builder", href: "/dashboard/routine-builder", icon: BookOpen }
-    
+    { name: "Routine Builder", href: "/dashboard/routine-builder", icon: BookOpen },
+    { name: "Student Directory", href: "/dashboard/student-mgmt", icon: Users }
   ];
 
   // ADDED NEW ADMIN LINKS HERE
@@ -129,7 +129,7 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
 
         {user.role === "dept_head" && (
           <>
-            {renderLinks(facultyBaseLinks, "Faculty Menu")}
+            
             {renderLinks(deptHeadLinks, "Head Tools")}
           </>
         )}

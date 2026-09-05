@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { UserPlus, Star, Mail, Loader2, X, Briefcase, GraduationCap, ChevronUp } from "lucide-react";
 import DropdownFilter from "@/app/components/DropdownFilter";
 import { useToast } from "@/app/components/ToastProvider";
+import Swal from "sweetalert2";
 type Faculty = {
   _id: string;
   name: string;
@@ -75,7 +76,17 @@ export default function FacultyManagement() {
   };
 
   const handlePromoteToHead = async (userId: string, name: string) => {
-    if (!confirm(`Make ${name} the new Department Head? The current Head will be stepped down.`)) return;
+   const result = await Swal.fire({
+  title: "Make Department Head?",
+  text: `Make ${name} the new Department Head? The current Head will be stepped down.`,
+  icon: "warning",
+  showCancelButton: true,
+  confirmButtonText: "Yes, make Department Head",
+  cancelButtonText: "Cancel",
+  reverseButtons: true,
+});
+
+if (!result.isConfirmed) return;
     
     const res = await fetch("/api/admin/faculty", {
       method: "PATCH",
@@ -92,7 +103,16 @@ export default function FacultyManagement() {
     
     if (!nextRank) return; // Safety check
 
-    if (!confirm(`Promote ${fac.name} to ${nextRank}?`)) return;
+    const result = await Swal.fire({
+      title: "Promote Faculty?",
+      text: `Promote ${fac.name} to ${nextRank}?`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Yes, promote",
+      cancelButtonText: "Cancel",
+    });
+
+    if (!result.isConfirmed) return;
 
     const res = await fetch("/api/admin/faculty", {
       method: "PATCH",
