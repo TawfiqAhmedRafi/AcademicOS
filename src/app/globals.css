@@ -42,3 +42,26 @@ body {
 .glass-nav {
   @apply bg-white/60 backdrop-blur-md border-b border-white/20 dark:bg-[#020617]/70 dark:border-white/10;
 }
+/* Seamless Infinite Marquee */
+@keyframes marquee {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-100%); }
+}
+
+.marquee-container {
+  display: flex;
+  overflow: hidden;
+  width: 100%;
+}
+
+.animate-marquee {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  min-width: 100%;
+  animation: marquee 25s linear infinite;
+}
+
+.marquee-container:hover .animate-marquee {
+  animation-play-state: paused;
+}

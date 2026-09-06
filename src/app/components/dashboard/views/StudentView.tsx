@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { BookOpen, Clock, GraduationCap, CheckSquare, FileText, AlertCircle, Calendar, MapPin, Loader2, CheckCircle, ShieldAlert } from "lucide-react";
+import { BookOpen, Clock, GraduationCap, CheckSquare, FileText, AlertCircle, Calendar, MapPin, Loader2, CheckCircle, ShieldAlert, Bell } from "lucide-react";
 import { StatCard, AlertBanner } from "../Widgets";
 
 const TIME_PERIODS: Record<number, { start: string, end: string }> = {
@@ -27,18 +27,20 @@ export default function StudentView({ user }: { user: any }) {
     ffStatus: "unregistered",
     backlogStatus: "unregistered",
     seriesConfig: null as any,
+    activeNotices: [] as any[], 
   });
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const [resultsRes, routineRes, regRes, ffRes, backlogRes] = await Promise.all([
+        const [resultsRes, routineRes, regRes, ffRes, backlogRes, noticesRes] = await Promise.all([
           fetch('/api/student/results'),
           fetch('/api/student/routine'),
           fetch('/api/student/registration'),
           fetch('/api/student/form-fillup'),
-          fetch('/api/student/backlog-registration')
+          fetch('/api/student/backlog-registration'),
+          fetch('/api/notices') 
         ]);
 
         let cgpa = 0;
@@ -50,7 +52,6 @@ export default function StudentView({ user }: { user: any }) {
         let backlogStatus = "unregistered";
         let seriesConfig = null;
 
-        // 1. Process Results (CGPA & Credits)
         if (resultsRes.ok) {
           const resData = await resultsRes.json();
           cgpa = resData.cgpa || 0;
@@ -58,12 +59,10 @@ export default function StudentView({ user }: { user: any }) {
           earnedCredits = (resData.academicHistory || []).reduce((sum: number, hist: any) => sum + (hist.earnedCredits || 0), 0);
         }
 
-        // 2. Process Routine (Today's Classes)
         if (routineRes.ok) {
           const routData = await routineRes.json();
           const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
           const today = days[new Date().getDay()];
-
           if (routData.slots) {
             todaysClasses = routData.slots
               .filter((s: any) => s.day === today)
@@ -71,33 +70,36 @@ export default function StudentView({ user }: { user: any }) {
           }
         }
 
-        // 3. Process Registration & Config
         if (regRes.ok) {
           const regData = await regRes.json();
           regStatus = regData.status;
-          seriesConfig = regData.seriesConfig; // Contains the global gates!
+          seriesConfig = regData.seriesConfig; 
         }
 
-        // 4. Process Form Fill-up
         if (ffRes.ok) {
           const ffData = await ffRes.json();
           ffStatus = ffData.formFillupStatus;
         }
 
-        // 5. Process Backlog Status
         if (backlogRes.ok) {
           const backlogData = await backlogRes.json();
           backlogStatus = backlogData.status;
         }
 
-        setStats({ cgpa, earnedCredits, activeBacklogs, todaysClasses, regStatus, ffStatus, backlogStatus, seriesConfig });
+        // Process Notices specifically for this student
+        let activeNotices: any[] = [];
+        if (noticesRes.ok && seriesConfig) {
+           const allNotices = await noticesRes.json();
+           activeNotices = allNotices.filter((n: any) => n.series === "all" || String(n.series) === String(seriesConfig.series));
+        }
+
+        setStats({ cgpa, earnedCredits, activeBacklogs, todaysClasses, regStatus, ffStatus, backlogStatus, seriesConfig, activeNotices });
       } catch (error) {
         console.error("Failed to fetch student dashboard data:", error);
       } finally {
         setIsLoading(false);
       }
     };
-
     fetchDashboardData();
   }, []);
 
@@ -111,13 +113,64 @@ export default function StudentView({ user }: { user: any }) {
 
   const pendingCount = [stats.regStatus, stats.ffStatus, stats.backlogStatus].filter(s => s === "pending").length;
   const todayStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  
+  // --- MULTI-HEADLINE TICKER LOGIC ---
+  // Grab the Top 3 most recent notices applicable to this student
+  const recentNotices = stats.activeNotices?.slice(0, 3) || [];
+  
+  // To ensure the CSS seamless loop never breaks (even on ultrawide monitors),
+  // we dynamically repeat the top notices until we have a continuous chain of at least 4 items.
+  const tickerItems = recentNotices.length > 0 
+    ? Array.from({ length: Math.max(4, recentNotices.length * 2) }).map((_, i) => recentNotices[i % recentNotices.length])
+    : [];
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
-      <h1 className="mb-8 text-3xl font-extrabold text-slate-900 dark:text-white">
+      <h1 className="mb-6 text-3xl font-extrabold text-slate-900 dark:text-white">
         Welcome back, <span className="text-ruet-blue dark:text-ruet-gold">{user.name}</span>
       </h1>
-      
+
+      {/* --- PREMIUM DYNAMIC MULTI-HEADLINE MARQUEE --- */}
+      {tickerItems.length > 0 && (
+        <div className="mb-8 relative flex w-full items-center overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-[#0f172a] dark:ring-white/10">
+          {/* Static Left Badge */}
+          <div className="relative z-10 flex items-center gap-2 bg-ruet-blue px-5 py-3.5 font-bold text-white shadow-[10px_0_15px_-3px_rgba(0,0,0,0.1)] dark:bg-ruet-gold dark:text-black">
+            <Bell size={18} className="animate-pulse" />
+            <span className="hidden sm:inline uppercase tracking-widest text-xs">Latest Notices</span>
+          </div>
+          
+          {/* Seamless Scrolling Content */}
+          <div className="marquee-container bg-slate-50/50 dark:bg-white/5 py-3.5">
+            {/* Track 1 */}
+            <div className="animate-marquee hover:[animation-play-state:paused]">
+              {tickerItems.map((n: any, idx: number) => (
+                <div key={`t1-${idx}`} className="flex items-center gap-2 px-6">
+                  <span className={`rounded px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${n.type === 'system' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' : n.series === 'all' ? 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400' : 'bg-ruet-blue/10 text-ruet-blue dark:bg-ruet-gold/10 dark:text-ruet-gold'}`}>
+                    {n.type === 'system' ? 'System' : n.series === 'all' ? 'Global' : 'Notice'}
+                  </span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{n.title}:</span>
+                  <span className="text-slate-600 dark:text-slate-400">{n.content}</span>
+                  <span className="ml-6 text-slate-300 dark:text-slate-700">|</span>
+                </div>
+              ))}
+            </div>
+            {/* Track 2 (Identical Clone for seamless loop) */}
+            <div className="animate-marquee hover:[animation-play-state:paused]" aria-hidden="true">
+              {tickerItems.map((n: any, idx: number) => (
+                <div key={`t2-${idx}`} className="flex items-center gap-2 px-6">
+                  <span className={`rounded px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${n.type === 'system' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' : n.series === 'all' ? 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400' : 'bg-ruet-blue/10 text-ruet-blue dark:bg-ruet-gold/10 dark:text-ruet-gold'}`}>
+                    {n.type === 'system' ? 'System' : n.series === 'all' ? 'Global' : 'Notice'}
+                  </span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{n.title}:</span>
+                  <span className="text-slate-600 dark:text-slate-400">{n.content}</span>
+                  <span className="ml-6 text-slate-300 dark:text-slate-700">|</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* DYNAMIC ALERTS BASED ON GLOBAL GATES */}
       {stats.activeBacklogs > 0 && stats.seriesConfig?.backlogRegistration?.isOpen && stats.backlogStatus === "unregistered" && (
         <AlertBanner 
@@ -126,14 +179,12 @@ export default function StudentView({ user }: { user: any }) {
           type="warning" 
         />
       )}
-
       {stats.seriesConfig?.registration?.isOpen && stats.regStatus === "unregistered" && (
         <AlertBanner 
           title={`Registration Open: Semester ${stats.seriesConfig.currentSemester}`} 
           message="Course registration is currently open for your series. Please complete your registration and submit it to your Course Advisor." 
         />
       )}
-
       {stats.seriesConfig?.formFillup?.isOpen && stats.ffStatus === "unregistered" && stats.regStatus === "approved" && (
         <AlertBanner 
           title="Exam Form Fill-up Open" 
@@ -216,7 +267,6 @@ export default function StudentView({ user }: { user: any }) {
             )}
           </div>
         </div>
-
       </div>
     </div>
   );
