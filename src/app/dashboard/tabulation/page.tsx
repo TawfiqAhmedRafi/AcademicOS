@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Calculator, Send, AlertCircle, CheckCircle2, Lock, FileText } from "lucide-react";
+import { Loader2, Calculator, Send, AlertCircle, CheckCircle2, Lock, FileText, Download } from "lucide-react";
 import { useToast } from "@/app/components/ToastProvider";
 import Swal from "sweetalert2";
 
@@ -9,13 +9,14 @@ export default function TabulationEnginePage() {
   const [seriesData, setSeriesData] = useState<any[]>([]);
   const [activeConfig, setActiveConfig] = useState<any>(null);
   const [draft, setDraft] = useState<any>(null);
-  
   const [isLoading, setIsLoading] = useState(true);
+  
   const [isCompiling, setIsCompiling] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false); // <-- NEW
+
   const { showToast } = useToast();
 
-  // 1. Fetch Advisor's Series
   useEffect(() => {
     const fetchInitData = async () => {
       const res = await fetch("/api/advisor/roster");
@@ -29,7 +30,6 @@ export default function TabulationEnginePage() {
     fetchInitData();
   }, []);
 
-  // 2. Fetch Existing Draft
   const fetchDraft = async (series: string, semester: string) => {
     const res = await fetch(`/api/advisor/compile-result?series=${series}&semester=${semester}`);
     if (res.ok) {
@@ -42,7 +42,6 @@ export default function TabulationEnginePage() {
     if (activeConfig) fetchDraft(activeConfig.series, activeConfig.currentSemester);
   }, [activeConfig]);
 
-  // 3. Handlers
   const handleCompile = async () => {
     setIsCompiling(true);
     showToast("Aggregating faculty marks...", "info");
@@ -52,7 +51,6 @@ export default function TabulationEnginePage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ series: activeConfig.series, semester: activeConfig.currentSemester })
     });
-
     if (res.ok) {
       showToast("Draft Tabulation Sheet compiled!", "success");
       await fetchDraft(activeConfig.series, activeConfig.currentSemester);
@@ -73,7 +71,6 @@ export default function TabulationEnginePage() {
       cancelButtonText: "Cancel",
       reverseButtons: true,
     });
-
     if (!result.isConfirmed) return;
 
     setIsSubmitting(true);
@@ -82,7 +79,6 @@ export default function TabulationEnginePage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ series: activeConfig.series, semester: activeConfig.currentSemester, action: "submit_to_head" })
     });
-
     if (res.ok) {
       showToast("Forwarded to Head successfully", "success");
       await fetchDraft(activeConfig.series, activeConfig.currentSemester);
@@ -90,6 +86,30 @@ export default function TabulationEnginePage() {
       showToast("Failed to submit.", "error");
     }
     setIsSubmitting(false);
+  };
+
+  // --- NEW: Download PDF Handler ---
+  const handleDownloadPdf = async () => {
+    setIsDownloading(true);
+    showToast("Generating official PDF...", "info");
+    try {
+      const res = await fetch(`/api/advisor/tabulation-pdf?series=${activeConfig.series}&semester=${activeConfig.currentSemester}`);
+      if (!res.ok) throw new Error("Failed to generate PDF");
+      
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Tabulation_Series_${activeConfig.series}_Sem_${activeConfig.currentSemester}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      showToast("Couldn't generate the PDF.", "error");
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   if (isLoading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="animate-spin text-ruet-blue dark:text-ruet-gold" size={32} /></div>;
@@ -122,7 +142,6 @@ export default function TabulationEnginePage() {
       {activeConfig && (
         <div className="glass-panel rounded-3xl overflow-hidden shadow-xl border border-slate-200 dark:border-white/10">
           
-          {/* Header Action Strip */}
           <div className="bg-slate-50/50 dark:bg-white/5 p-6 border-b border-slate-200 dark:border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -135,6 +154,19 @@ export default function TabulationEnginePage() {
             </div>
             
             <div className="flex flex-wrap items-center gap-3">
+              
+              {/* --- NEW: PDF Download Button appears ONLY when Published --- */}
+              {draft?.status === "published" && (
+                <button 
+                  onClick={handleDownloadPdf}
+                  disabled={isDownloading}
+                  className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:text-black dark:hover:bg-slate-200 px-4 py-2.5 rounded-xl font-bold text-sm transition-colors disabled:opacity-50 shadow-sm"
+                >
+                  {isDownloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                  Download Official PDF
+                </button>
+              )}
+
               <button 
                 onClick={handleCompile}
                 disabled={isCompiling || isLocked}
@@ -151,13 +183,12 @@ export default function TabulationEnginePage() {
                   className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-emerald-500 dark:hover:bg-emerald-600 px-4 py-2.5 rounded-xl font-bold text-sm transition-colors disabled:opacity-50 shadow-sm"
                 >
                   {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : isLocked ? <CheckCircle2 size={16} /> : <Send size={16} />}
-                  {isLocked ? "Sent to Head" : "Submit to Head"}
+                  {draft.status === "published" ? "Published" : isLocked ? "Sent to Head" : "Submit to Head"}
                 </button>
               )}
             </div>
           </div>
 
-          {/* Table Area */}
           {!draft ? (
             <div className="py-24 flex flex-col items-center justify-center text-center">
               <div className="h-16 w-16 bg-slate-100 dark:bg-white/5 rounded-full flex items-center justify-center mb-4">
@@ -200,7 +231,7 @@ export default function TabulationEnginePage() {
                       </td>
                       
                       <td className="px-6 py-4 text-right">
-                        {res.failedCourses.length > 0 ? (
+                        {res.failedCourses && res.failedCourses.length > 0 ? (
                           <div className="flex flex-col items-end gap-1">
                             {res.failedCourses.map((fc: string) => (
                               <span key={fc} className="bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1">
