@@ -128,27 +128,43 @@ export async function PATCH(req: Request) {
       if (oldSemester) {
         const students = await db.collection("users").find({ role: "student", series: seriesDoc.series }).toArray();
         if (students.length > 0) {
-          const bulkOps = students.map(student => ({
-            updateOne: {
-              filter: { _id: student._id },
-              update: {
-                $push: {
-                  academicHistory: {
-                    semester: oldSemester,
-                    courses: student.registeredCourses || [],
-                    registrationStatus: student.registrationStatus || "unregistered",
-                    formFillupStatus: student.formFillupStatus || "unregistered",
-                    archivedAt: new Date()
-                  }
-                },
-                $set: {
-                  registrationStatus: "unregistered",
-                  formFillupStatus: "unregistered",
-                  registeredCourses: []
-                }
+          const bulkOps = students.map(student => {
+            
+            // Base update: Reset all active gating flags
+            const updateDoc: any = {
+              $set: {
+                registrationStatus: "unregistered",
+                formFillupStatus: "unregistered",
+                registeredCourses: [],
+                backlogRegStatus: "unregistered",
+                registeredBacklogs: []
               }
+            };
+
+            // --- DOUBLE ARCHIVE FIX ---
+            // Only push to history if the student has active courses that 
+            // haven't already been safely wiped and archived by the Result Publishing Engine.
+            if (student.registeredCourses && student.registeredCourses.length > 0) {
+              updateDoc.$push = {
+                academicHistory: {
+                  semester: oldSemester,
+                  courses: student.registeredCourses,
+                  registrationStatus: student.registrationStatus || "unregistered",
+                  formFillupStatus: student.formFillupStatus || "unregistered",
+                  archivedAt: new Date(),
+                  note: "Archived via Semester Promotion"
+                }
+              };
             }
-          }));
+
+            return {
+              updateOne: {
+                filter: { _id: student._id },
+                update: updateDoc
+              }
+            };
+          });
+          
           await db.collection("users").bulkWrite(bulkOps);
         }
       }
@@ -159,6 +175,7 @@ export async function PATCH(req: Request) {
              currentSemester: payload.newSemester, 
              "registration.isOpen": false,
             "formFillup.isOpen": false,
+            "backlogRegistration.isOpen": false, // Also locking backlogs for safety
             updatedAt: new Date() 
            } 
          }
