@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Loader2, Download, Upload, CheckCircle2, EyeOff, FileSpreadsheet, AlertCircle, Check } from "lucide-react";
+import { Loader2, Download, Upload, CheckCircle2, EyeOff, FileSpreadsheet, AlertCircle, Check, Filter } from "lucide-react";
 import { useToast } from "@/app/components/ToastProvider";
+import DropdownFilter from "@/app/components/DropdownFilter";
 
 type MarkCourse = {
   uniqueId: string;
@@ -37,6 +38,18 @@ export default function FacultyMarksDashboard() {
   
   const [resolvedXX, setResolvedXX] = useState<Record<string, string>>({});
   const { showToast } = useToast();
+
+  // --- Filter State & Dynamic Options ---
+  const [seriesFilter, setSeriesFilter] = useState("All");
+
+  const uniqueSeries = Array.from(new Set(courses.map(c => c.series))).sort((a, b) => a - b);
+  const seriesOptions = [
+    { label: "All Batches", value: "All" },
+    ...uniqueSeries.map(s => ({ label: `Series ${s}`, value: String(s) }))
+  ];
+
+  const filteredCourses = courses.filter(c => seriesFilter === "All" || String(c.series) === seriesFilter);
+  // ------------------------------------------
 
   const fetchCourses = async () => {
     setIsLoading(true);
@@ -122,9 +135,22 @@ export default function FacultyMarksDashboard() {
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
-      <div className="mb-8">
-        <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white">Marks Upload Portal</h1>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Download Excel templates, input your marks, and upload securely to the engine.</p>
+      
+      {/* Updated Header with Flexbox for the Dropdown */}
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white">Marks Upload Portal</h1>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Download Excel templates, input your marks, and upload securely to the engine.</p>
+        </div>
+        
+        {courses.length > 0 && (
+          <DropdownFilter
+            icon={<Filter size={16} />}
+            options={seriesOptions}
+            value={seriesFilter}
+            onChange={setSeriesFilter}
+          />
+        )}
       </div>
 
       {courses.length === 0 ? (
@@ -135,7 +161,14 @@ export default function FacultyMarksDashboard() {
         </div>
       ) : (
         <div className="space-y-8">
-          {courses.map((course) => {
+          {[...filteredCourses]
+            .sort((a, b) => {
+              // 1. Primary Sort: Series Seniority (Ascending: 20 comes before 22)
+              if (a.series !== b.series) return a.series - b.series;
+              // 2. Secondary Sort: Alphabetical by Course Code
+              return a.courseCode.localeCompare(b.courseCode);
+            })
+            .map((course) => {
             const isXX = course.courseCode.includes("XX");
             const displayCode = isXX && resolvedXX[course.uniqueId] ? resolvedXX[course.uniqueId] : course.courseCode;
             const segments = getSegments(course); // Dynamic Segments!
