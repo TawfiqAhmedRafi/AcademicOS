@@ -28,11 +28,13 @@ export async function GET() {
     }).toArray();
 
     let assignedCourses: any[] = [];
+    const resolvedXX = user.resolvedXX || {}; // Fetch the teacher's saved XX codes
 
     rawSlots.forEach((slot: any) => {
       let finalCourseCode = slot.courseCode;
+      let baseType = slot.type.includes('lab') || slot.type.includes('sessional') ? 'sessional' : 'theory';
       let teacherCount = slot.teachers?.length || 1;
-      
+
       // FLAW 2 FIX: Hard Split Logic by Index mapped to generic string splitting
       if (slot.courseCode.includes('/')) {
         const splitCodes = slot.courseCode.split('/').map((c: string) => c.trim());
@@ -40,7 +42,7 @@ export async function GET() {
         
         if (splitCodes[teacherIndex]) {
           finalCourseCode = splitCodes[teacherIndex];
-          teacherCount = 1; // It's split, so this teacher handles this specific course alone
+          teacherCount = 1; 
         }
       } 
       // Fallback to advanced modal builder split
@@ -53,15 +55,28 @@ export async function GET() {
         }
       }
 
-      const uniqueId = `${finalCourseCode}_${slot.series}`;
+      // --- NEW FIX 1: XX Electives are distinct 1-teacher courses ---
+      if (finalCourseCode.includes('XX')) {
+          teacherCount = 1;
+      }
+
+      // --- NEW FIX 2: Inject baseType to prevent Sessional/Theory collisions ---
+      const uniqueId = `${finalCourseCode}_${baseType}_${slot.series}`;
+
+      // --- NEW FIX 3: Apply the saved MongoDB exact course code ---
+      const displayCode = resolvedXX[uniqueId] || finalCourseCode;
+      const isXXPending = finalCourseCode.includes('XX') && !resolvedXX[uniqueId];
+
       if (!assignedCourses.find(c => c.uniqueId === uniqueId)) {
         assignedCourses.push({
           uniqueId,
-          courseCode: finalCourseCode,
+          courseCode: displayCode, // Passes the exact ETE 3211 back to the UI!
+          originalCode: finalCourseCode,
           series: slot.series,
-          type: slot.type.includes('lab') || slot.type.includes('sessional') ? 'sessional' : 'theory',
+          type: baseType,
           isSpecial: false,
-          teacherCount // <-- FLAW 1 FIX: Store teacher count
+          teacherCount,
+          isXXPending
         });
       }
     });
@@ -76,7 +91,7 @@ export async function GET() {
     catalogSpecial.forEach(specialCourse => {
       const matchingSeries = activeSeries.filter(s => s.currentSemester === specialCourse.semester);
       matchingSeries.forEach(series => {
-        const uniqueId = `${specialCourse.courseCode}_${series.series}`;
+        const uniqueId = `${specialCourse.courseCode}_special_${series.series}`;
         if (!assignedCourses.find(c => c.uniqueId === uniqueId)) {
           assignedCourses.push({
             uniqueId,
@@ -84,7 +99,8 @@ export async function GET() {
             series: Number(series.series),
             type: 'special',
             isSpecial: true,
-            teacherCount: 1 
+            teacherCount: 1,
+            isXXPending: false
           });
         }
       });
@@ -93,27 +109,25 @@ export async function GET() {
     const hiddenCourses = user.hiddenMarksCourses || [];
     const visibleCourses = assignedCourses.filter(c => !hiddenCourses.includes(c.uniqueId));
 
-    // FLAW 3 FIX: Fetch already uploaded marks to verify saved status
     const existingMarks = await db.collection("course_marks").find({
       teacherEmail: session.user.email
     }).project({ courseCode: 1, series: 1, segment: 1 }).toArray();
 
-    const allCourseCodes = [...new Set(visibleCourses.map(c => c.courseCode.replace("XX", "")) )];
+    const allCourseCodes = [...new Set(visibleCourses.map(c => c.courseCode))];
     const catalogData = await db.collection("courses").find({ 
-      courseCode: { $regex: new RegExp(allCourseCodes.join("|"), "i") } 
+      courseCode: { $in: allCourseCodes } 
     }).toArray();
 
     const enrichedCourses = visibleCourses.map(c => {
-      const catalogMatch = catalogData.find(cat => c.courseCode.includes("XX") ? cat.courseCode.startsWith(c.courseCode.replace("XX", "")) : cat.courseCode === c.courseCode);
+      const catalogMatch = catalogData.find(cat => cat.courseCode === c.courseCode);
       
-      // Map completed segments for this exact course and series
       const completedSegments = existingMarks
         .filter(m => m.courseCode === c.courseCode && m.series === c.series)
         .map(m => m.segment);
 
       return { 
         ...c, 
-        title: catalogMatch?.title || "Course Title Pending",
+        title: catalogMatch?.title || (c.isXXPending ? "Waiting for exact code..." : "Course Title Pending"),
         completedSegments 
       };
     });
@@ -127,16 +141,30 @@ export async function GET() {
 export async function PATCH(req: Request) {
   const session = await getServerSession(authOptions);
   try {
-    const { uniqueId } = await req.json();
+    const body = await req.json();
     const client = await clientPromise;
     const db = client.db("academicos");
     
-    await db.collection("users").updateOne(
-      { email: session?.user?.email },
-      { $addToSet: { hiddenMarksCourses: uniqueId } }
-    );
-    return NextResponse.json({ message: "Course hidden from dashboard" });
+    // --- NEW FIX 3: Save exact XX course code to database ---
+    if (body.action === "resolve_xx") {
+       const updateKey = `resolvedXX.${body.uniqueId}`;
+       await db.collection("users").updateOne(
+         { email: session?.user?.email },
+         { $set: { [updateKey]: body.resolvedCode } }
+       );
+       return NextResponse.json({ message: "Course code permanently saved." });
+    }
+
+    if (body.action === "hide") {
+        await db.collection("users").updateOne(
+        { email: session?.user?.email },
+        { $addToSet: { hiddenMarksCourses: body.uniqueId } }
+        );
+        return NextResponse.json({ message: "Course hidden from dashboard" });
+    }
+
+    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (error) {
-    return NextResponse.json({ error: "Failed to hide course" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to process request" }, { status: 500 });
   }
 }

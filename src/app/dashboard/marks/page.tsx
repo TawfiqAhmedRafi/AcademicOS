@@ -14,17 +14,32 @@ type MarkCourse = {
   isSpecial: boolean;
   teacherCount: number;
   completedSegments: string[];
+  isXXPending: boolean;
 };
 
-// Dynamic Segments based on Teacher Count
+// Dynamic Segments based on Teacher Count & Course Code
 const getSegments = (course: MarkCourse) => {
   if (course.type === 'theory') {
     if (course.teacherCount > 1) return ["Class Tests (2)", "Assignment", "Attendance", "Semester Final (Part)"];
     return ["Class Tests (4)", "Assignment", "Attendance", "Semester Final (Full)"];
   }
+  
   if (course.type === 'special') {
-    return ["Supervisor Marks", "Seminar/Showcase", "Board Viva", "Defense"];
+    const code = course.courseCode;
+    // 2nd & 3rd Year Projects
+    if (code.includes("2200") || code.includes("3200")) return ["Supervisor", "Showcase", "Board Viva"];
+    // 3rd Year Seminar
+    if (code.includes("3218")) return ["Supervisor", "Seminar 1", "Seminar 2"];
+    // 4th Year Thesis Part 1
+    if (code.includes("4100")) return ["Supervisor", "Pre Defense", "Board Viva"];
+    // 4th Year Thesis Part 2
+    if (code.includes("4200")) return ["Supervisor", "Defense", "Board Viva"];
+    
+    // Fallback
+    return ["Supervisor Marks", "Board Viva", "Defense"]; 
   }
+  
+  // Standard Sessional/Lab
   return ["Attendance", "Quiz", "Lab Report", "Performance", "Lab Viva", "Lab Final", "Board Viva"];
 };
 
@@ -36,7 +51,6 @@ export default function FacultyMarksDashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadTarget, setUploadTarget] = useState<{ courseCode: string, series: number, segment: string } | null>(null);
   
-  const [resolvedXX, setResolvedXX] = useState<Record<string, string>>({});
   const { showToast } = useToast();
 
   // --- Filter State & Dynamic Options ---
@@ -51,17 +65,17 @@ export default function FacultyMarksDashboard() {
   const filteredCourses = courses.filter(c => seriesFilter === "All" || String(c.series) === seriesFilter);
   // ------------------------------------------
 
-  const fetchCourses = async () => {
-    setIsLoading(true);
+  const fetchCourses = async (showSpinner = true) => {
+    if (showSpinner) setIsLoading(true);
     const res = await fetch("/api/faculty/marks-dashboard");
     if (res.ok) {
       const data = await res.json();
       setCourses(data.courses || []);
     }
-    setIsLoading(false);
+    if (showSpinner) setIsLoading(false);
   };
 
-  useEffect(() => { fetchCourses(); }, []);
+  useEffect(() => { fetchCourses(true); }, []);
 
   const handleHideCourse = async (uniqueId: string) => {
     if (!confirm("Remove this course from your dashboard? You should only do this once all your marks are uploaded.")) return;
@@ -69,9 +83,23 @@ export default function FacultyMarksDashboard() {
     await fetch("/api/faculty/marks-dashboard", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ uniqueId })
+      body: JSON.stringify({ action: "hide", uniqueId })
     });
     showToast("Course hidden.", "success");
+  };
+
+  const handleResolveXX = async (uniqueId: string, value: string) => {
+    if (value.length < 5) return;
+    showToast("Saving exact course code...", "info");
+    const res = await fetch("/api/faculty/marks-dashboard", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "resolve_xx", uniqueId, resolvedCode: value.toUpperCase() })
+    });
+    if (res.ok) {
+      showToast("Course code locked in!", "success");
+      fetchCourses(false); // Silent refresh to load correct name and un-dim the card
+    }
   };
 
   const handleDownloadDemo = async (courseCode: string, series: number, segment: string) => {
@@ -121,7 +149,7 @@ export default function FacultyMarksDashboard() {
        if (!res.ok) throw new Error(data.error || "Upload failed");
        
        showToast(data.message, "success");
-       fetchCourses(); // Refresh to update the green checkmarks!
+       fetchCourses(false); // SILENT refresh to update checkmarks without screen flash
     } catch (err: any) {
        showToast(err.message, "error");
     } finally {
@@ -136,7 +164,7 @@ export default function FacultyMarksDashboard() {
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       
-      {/* Updated Header with Flexbox for the Dropdown */}
+      {/* Header with Flexbox for the Dropdown */}
       <div className="mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white">Marks Upload Portal</h1>
@@ -169,44 +197,47 @@ export default function FacultyMarksDashboard() {
               return a.courseCode.localeCompare(b.courseCode);
             })
             .map((course) => {
-            const isXX = course.courseCode.includes("XX");
-            const displayCode = isXX && resolvedXX[course.uniqueId] ? resolvedXX[course.uniqueId] : course.courseCode;
-            const segments = getSegments(course); // Dynamic Segments!
+            const segments = getSegments(course);
 
             return (
               <div key={course.uniqueId} className="glass-panel rounded-3xl overflow-hidden border border-slate-200 dark:border-white/10 shadow-lg">
                 <div className={`px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-white/10 ${course.isSpecial ? 'bg-purple-50/50 dark:bg-purple-500/5' : course.type === 'theory' ? 'bg-blue-50/50 dark:bg-blue-500/5' : 'bg-emerald-50/50 dark:bg-emerald-500/5'}`}>
                   <div>
                     <div className="flex items-center gap-3 mb-1">
-                      {isXX && !resolvedXX[course.uniqueId] ? (
+                      
+                      {/* Input Box for XX Resolution */}
+                      {course.isXXPending ? (
                         <input 
                           type="text" 
                           placeholder="Type Exact Code (e.g. ETE 3212)" 
                           className="px-2 py-1 text-sm font-bold border border-amber-300 rounded focus:outline-none focus:border-amber-500 bg-amber-50 dark:bg-amber-900/30 text-amber-900 dark:text-amber-100 placeholder:font-normal"
-                          onBlur={(e) => {
-                            if(e.target.value.length > 5) setResolvedXX({...resolvedXX, [course.uniqueId]: e.target.value.toUpperCase()});
+                          onBlur={(e) => handleResolveXX(course.uniqueId, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleResolveXX(course.uniqueId, e.currentTarget.value);
                           }}
                         />
                       ) : (
-                        <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{displayCode}</h2>
+                        <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{course.courseCode}</h2>
                       )}
+
                       <span className="bg-slate-900 text-white dark:bg-white dark:text-black px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest">Series {course.series}</span>
-                      {course.isSpecial && <span className="bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Broadcast</span>}
+                      <span className="bg-slate-200 text-slate-700 dark:bg-white/20 dark:text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase">{course.type}</span>
                       {course.type === "theory" && <span className="bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase">{course.teacherCount > 1 ? "Multi-Teacher" : "Single Teacher"}</span>}
+                      {course.isSpecial && <span className="bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Broadcast</span>}
                     </div>
                     <p className="text-sm font-medium text-slate-600 dark:text-slate-400 line-clamp-1">{course.title}</p>
                   </div>
                   <button onClick={() => handleHideCourse(course.uniqueId)} className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"><EyeOff size={14} /> Remove</button>
                 </div>
 
-                {isXX && !resolvedXX[course.uniqueId] && (
+                {course.isXXPending && (
                   <div className="bg-amber-50 dark:bg-amber-500/10 p-3 flex items-center gap-2 border-b border-amber-100 dark:border-amber-500/20">
                     <AlertCircle size={16} className="text-amber-600 dark:text-amber-400" />
-                    <span className="text-xs font-semibold text-amber-800 dark:text-amber-200">Enter exact code above to unlock uploads.</span>
+                    <span className="text-xs font-semibold text-amber-800 dark:text-amber-200">Enter exact course code above to unlock uploads. Press Enter to save.</span>
                   </div>
                 )}
 
-                <div className={`p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${isXX && !resolvedXX[course.uniqueId] ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+                <div className={`p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${course.isXXPending ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
                   {segments.map((segment, idx) => {
                     const isCompleted = course.completedSegments.includes(segment);
                     
@@ -222,15 +253,15 @@ export default function FacultyMarksDashboard() {
                         </div>
                         
                         <div className="flex flex-col gap-2 mt-auto">
-                          <button onClick={() => handleDownloadDemo(displayCode, course.series, segment)} className="w-full flex items-center justify-center gap-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 py-2 rounded-xl text-xs font-bold transition-colors">
+                          <button onClick={() => handleDownloadDemo(course.courseCode, course.series, segment)} className="w-full flex items-center justify-center gap-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 py-2 rounded-xl text-xs font-bold transition-colors">
                             <FileSpreadsheet size={14} className="text-emerald-600 dark:text-emerald-400" /> Template
                           </button>
                           <button 
-                            onClick={() => triggerUploadClick(displayCode, course.series, segment)}
+                            onClick={() => triggerUploadClick(course.courseCode, course.series, segment)}
                             disabled={isUploading}
                             className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-colors shadow-sm disabled:opacity-50 ${isCompleted ? 'bg-slate-800 text-white hover:bg-slate-700 dark:bg-white dark:text-black dark:hover:bg-slate-200' : 'bg-ruet-blue text-white hover:bg-blue-900 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400'}`}
                           >
-                            {isUploading && uploadTarget?.segment === segment && uploadTarget?.courseCode === displayCode ? (
+                            {isUploading && uploadTarget?.segment === segment && uploadTarget?.courseCode === course.courseCode ? (
                               <Loader2 size={14} className="animate-spin" />
                             ) : (
                               isCompleted ? <Check size={14} /> : <Upload size={14} />
