@@ -11,12 +11,13 @@ import {
   X,
   AlertCircle,
   Award,
+  Upload
 } from "lucide-react";
 import DropdownFilter from "@/app/components/DropdownFilter";
 import { useToast } from "@/app/components/ToastProvider";
 import Swal from "sweetalert2";
-type Advisor = { email: string; name: string };
 
+type Advisor = { email: string; name: string };
 type Series = {
   _id: string;
   series: string;
@@ -26,7 +27,6 @@ type Series = {
   advisor2?: Advisor | null;
   registration: { isOpen: boolean; deadline: string | null };
 };
-
 type Faculty = {
   _id: string;
   name: string;
@@ -53,13 +53,13 @@ export default function SeriesManagerPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newSeriesName, setNewSeriesName] = useState("");
   const [newSeriesSem, setNewSeriesSem] = useState("1-1");
+  const [file, setFile] = useState<File | null>(null); // <-- NEW
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { showToast } = useToast();
-  // SILENT REFRESH: showLoader determines if we trigger the spinning UI
+
   const fetchData = async (showLoader = true) => {
     if (showLoader) setIsLoading(true);
-
     const [resSeries, resFac] = await Promise.all([
       fetch("/api/head/series"),
       fetch("/api/head/faculty-list"),
@@ -69,60 +69,60 @@ export default function SeriesManagerPage() {
       setSeriesList(await resSeries.json());
       setFacultyList(await resFac.json());
     }
-
     if (showLoader) setIsLoading(false);
   };
 
   useEffect(() => {
-    fetchData(true); // Initial load: DO show the spinner
+    fetchData(true); 
   }, []);
 
   const handleCreateSeries = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!file) {
+      showToast("Please upload the student list Excel file.", "error");
+      return;
+    }
     setIsSubmitting(true);
+
+    const formData = new FormData();
+    formData.append("series", newSeriesName);
+    formData.append("currentSemester", newSeriesSem);
+    formData.append("file", file);
+
     const res = await fetch("/api/head/series", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        series: newSeriesName,
-        currentSemester: newSeriesSem,
-      }),
+      body: formData,
     });
+
     if (res.ok) {
+      const data = await res.json();
       setIsAddModalOpen(false);
       setNewSeriesName("");
       setNewSeriesSem("1-1");
-      showToast(`Series ${newSeriesName} initialized successfully.`, "success");
+      setFile(null);
+      showToast(data.message, "success");
       fetchData(false); // Silent refresh
     } else {
-      // 3. Replace the alert
-      showToast("Failed to create series. It might already exist.", "error");
+      const data = await res.json();
+      showToast(data.error || "Failed to create series.", "error");
     }
     setIsSubmitting(false);
   };
 
-  const handleUpdateSemester = async (
-    seriesId: string,
-    seriesName: string,
-    currentSem: string,
-  ) => {
-    const currentIndex = semesterOptions.findIndex(
-      (s) => s.value === currentSem,
-    );
+  const handleUpdateSemester = async (seriesId: string, seriesName: string, currentSem: string) => {
+    const currentIndex = semesterOptions.findIndex((s) => s.value === currentSem);
     const nextSem = semesterOptions[currentIndex + 1]?.value;
 
     const result = await Swal.fire({
-  title: "Promote Series?",
-  text: `Promote Series ${seriesName} to Semester ${nextSem}?`,
-  icon: "question",
-  showCancelButton: true,
-  confirmButtonText: "Yes, promote",
-  cancelButtonText: "Cancel",
-  reverseButtons: true,
-});
-
-if (!result.isConfirmed) return;
-     
+      title: "Promote Series?",
+      text: `Promote Series ${seriesName} to Semester ${nextSem}?`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Yes, promote",
+      cancelButtonText: "Cancel",
+      reverseButtons: true,
+    });
+    if (!result.isConfirmed) return;
 
     const res = await fetch("/api/head/series", {
       method: "PATCH",
@@ -133,37 +133,30 @@ if (!result.isConfirmed) return;
         payload: { newSemester: nextSem },
       }),
     });
-
-    if (res.ok) fetchData(false); // Silent refresh
+    if (res.ok) fetchData(false);
   };
 
   const handleGraduateSeries = async (seriesId: string, seriesName: string) => {
-const result = await Swal.fire({
-  title: "Graduate Series?",
-  text: `Are you sure you want to graduate Series ${seriesName}? This will archive the batch.`,
-  icon: "warning",
-  showCancelButton: true,
-  confirmButtonText: "Yes, graduate",
-  cancelButtonText: "Cancel",
-  reverseButtons: true,
-});
-
-if (!result.isConfirmed) return;
+    const result = await Swal.fire({
+      title: "Graduate Series?",
+      text: `Are you sure you want to graduate Series ${seriesName}? This will archive the batch.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, graduate",
+      cancelButtonText: "Cancel",
+      reverseButtons: true,
+    });
+    if (!result.isConfirmed) return;
 
     const res = await fetch("/api/head/series", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "graduate", seriesId }),
     });
-
-    if (res.ok) fetchData(false); // Silent refresh
+    if (res.ok) fetchData(false); 
   };
 
-  const handleAssignAdvisor = async (
-    seriesId: string,
-    slot: number,
-    email: string,
-  ) => {
+  const handleAssignAdvisor = async (seriesId: string, slot: number, email: string) => {
     const faculty = facultyList.find((f) => f.email === email);
     const res = await fetch("/api/head/series", {
       method: "PATCH",
@@ -178,8 +171,7 @@ if (!result.isConfirmed) return;
         },
       }),
     });
-
-    if (res.ok) fetchData(false); // Silent refresh
+    if (res.ok) fetchData(false);
   };
 
   const advisorOptions = [
@@ -209,78 +201,54 @@ if (!result.isConfirmed) return;
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:gap-8">
         {isLoading ? (
           <div className="col-span-full flex h-40 items-center justify-center">
-            <Loader2
-              className="animate-spin text-ruet-blue dark:text-ruet-gold"
-              size={32}
-            />
+            <Loader2 className="animate-spin text-ruet-blue dark:text-ruet-gold" size={32} />
           </div>
         ) : seriesList.length === 0 ? (
           <div className="col-span-full flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-300 bg-white/30 py-24 text-center dark:border-white/10 dark:bg-white/5">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-ruet-blue/10 text-ruet-blue dark:bg-ruet-gold/10 dark:text-ruet-gold">
               <Network size={32} />
             </div>
-            <h3 className="mb-2 text-xl font-bold text-slate-900 dark:text-white">
-              No Series Onboarded
-            </h3>
+            <h3 className="mb-2 text-xl font-bold text-slate-900 dark:text-white">No Series Onboarded</h3>
             <p className="max-w-md text-sm leading-relaxed text-slate-500 dark:text-slate-400">
               Your department currently has no active batches in the system.
             </p>
           </div>
         ) : (
           seriesList.map((cohort, index) => {
-            // Calculate the next semester for the distinct promote button
-            const currentIndex = semesterOptions.findIndex(
-              (s) => s.value === cohort.currentSemester,
-            );
+            const currentIndex = semesterOptions.findIndex((s) => s.value === cohort.currentSemester);
             const nextSem = semesterOptions[currentIndex + 1]?.value;
 
             return (
               <div
                 key={cohort._id}
                 className="glass-panel relative rounded-3xl p-6 transition-all duration-300 hover:shadow-xl dark:hover:shadow-ruet-gold/5"
-                style={{ zIndex: 50 - index }} // MAGIC FIX: Ensures earlier cards stack ON TOP of later cards
+                style={{ zIndex: 50 - index }} 
               >
                 <div className="mb-6 flex items-start justify-between border-b border-slate-200 pb-6 dark:border-white/10">
                   <div>
                     <div className="flex items-center gap-3">
-                      <h2 className="text-2xl font-black text-slate-900 dark:text-white">
-                        Series {cohort.series}
-                      </h2>
+                      <h2 className="text-2xl font-black text-slate-900 dark:text-white">Series {cohort.series}</h2>
                       {cohort.registration.isOpen ? (
-                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">
-                          Reg. Open
-                        </span>
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">Reg. Open</span>
                       ) : (
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600 dark:bg-white/10 dark:text-slate-400">
-                          Reg. Closed
-                        </span>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600 dark:bg-white/10 dark:text-slate-400">Reg. Closed</span>
                       )}
                     </div>
                     <div className="mt-2 flex items-center gap-2 font-mono text-sm font-bold text-ruet-blue dark:text-ruet-gold">
-                      <GraduationCap size={16} /> Semester{" "}
-                      {cohort.currentSemester}
+                      <GraduationCap size={16} /> Semester {cohort.currentSemester}
                     </div>
                   </div>
 
-                  {/* DISTINCT PROMOTION / GRADUATION BUTTON */}
                   {cohort.currentSemester === "4-2" ? (
                     <button
-                      onClick={() =>
-                        handleGraduateSeries(cohort._id, cohort.series)
-                      }
+                      onClick={() => handleGraduateSeries(cohort._id, cohort.series)}
                       className="flex items-center gap-2 rounded-xl bg-amber-100 px-4 py-2.5 text-sm font-bold text-amber-700 shadow-sm transition-all hover:bg-amber-200 dark:bg-ruet-gold/20 dark:text-ruet-gold dark:hover:bg-ruet-gold/30"
                     >
                       <Award size={16} /> Graduate Batch
                     </button>
                   ) : nextSem ? (
                     <button
-                      onClick={() =>
-                        handleUpdateSemester(
-                          cohort._id,
-                          cohort.series,
-                          cohort.currentSemester,
-                        )
-                      }
+                      onClick={() => handleUpdateSemester(cohort._id, cohort.series, cohort.currentSemester)}
                       className="flex items-center gap-1 rounded-xl bg-ruet-blue/10 px-4 py-2.5 text-sm font-bold text-ruet-blue transition-colors hover:bg-ruet-blue hover:text-white dark:bg-ruet-gold/10 dark:text-ruet-gold dark:hover:bg-ruet-gold dark:hover:text-black"
                     >
                       Promote to {nextSem} <ChevronRight size={16} />
@@ -288,43 +256,29 @@ if (!result.isConfirmed) return;
                   ) : null}
                 </div>
 
-                {/* DUAL ADVISORS UI */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {/* Advisor 1 */}
                   <div className="relative z-40">
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Advisor 1
-                    </label>
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Advisor 1</label>
                     <DropdownFilter
                       icon={<Users size={16} />}
                       options={advisorOptions}
                       value={cohort.advisor1?.email || "unassigned"}
-                      onChange={(val) =>
-                        handleAssignAdvisor(cohort._id, 1, val)
-                      }
+                      onChange={(val) => handleAssignAdvisor(cohort._id, 1, val)}
                     />
                   </div>
-
-                  {/* Advisor 2 */}
                   <div className="relative z-30">
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Advisor 2
-                    </label>
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Advisor 2</label>
                     <DropdownFilter
                       icon={<Users size={16} />}
                       options={advisorOptions}
                       value={cohort.advisor2?.email || "unassigned"}
-                      onChange={(val) =>
-                        handleAssignAdvisor(cohort._id, 2, val)
-                      }
+                      onChange={(val) => handleAssignAdvisor(cohort._id, 2, val)}
                     />
                   </div>
                 </div>
-
                 {!cohort.advisor1 && !cohort.advisor2 && (
                   <p className="mt-4 flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
-                    <AlertCircle size={14} /> Assign at least one advisor to
-                    enable operations.
+                    <AlertCircle size={14} /> Assign at least one advisor to enable operations.
                   </p>
                 )}
               </div>
@@ -333,18 +287,13 @@ if (!result.isConfirmed) return;
         )}
       </div>
 
-      {/* MODAL: ADD SERIES */}
+      {/* MODAL: ADD SERIES & EXCEL UPLOAD */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm dark:bg-black/60 animate-in fade-in duration-200">
           <div className="glass-panel w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl dark:bg-[#0f172a] animate-in zoom-in-95">
             <div className="mb-6 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-                Onboard New Series
-              </h2>
-              <button
-                onClick={() => setIsAddModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-white"
-              >
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Onboard New Series</h2>
+              <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white">
                 <X size={20} />
               </button>
             </div>
@@ -365,9 +314,7 @@ if (!result.isConfirmed) return;
               </div>
 
               <div className="relative z-40">
-                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Starting Semester
-                </label>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Starting Semester</label>
                 <DropdownFilter
                   icon={<Network size={16} />}
                   options={semesterOptions}
@@ -376,16 +323,36 @@ if (!result.isConfirmed) return;
                 />
               </div>
 
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Student List (Excel)
+                </label>
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept=".xlsx, .xls"
+                    required
+                    onChange={(e) => setFile(e.target.files ? e.target.files[0] : null)}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className={`w-full rounded-xl border border-dashed ${file ? 'border-ruet-blue bg-ruet-blue/5' : 'border-slate-300 bg-white/50 dark:border-white/20 dark:bg-black/20'} px-4 py-3 flex items-center justify-between transition-colors`}>
+                     <span className="text-sm font-medium text-slate-600 dark:text-slate-300 truncate pr-4">
+                       {file ? file.name : "Upload Student XLSX file..."}
+                     </span>
+                     <Upload size={18} className={file ? "text-ruet-blue" : "text-slate-400"} />
+                  </div>
+                </div>
+                <p className="mt-2 text-[11px] text-slate-500">
+                  File must contain columns: <strong>Roll Number</strong> and <strong>Name</strong>. Students will receive an email-based temporary password.
+                </p>
+              </div>
+
               <button
-                disabled={isSubmitting}
+                disabled={isSubmitting || !file}
                 type="submit"
-                className="mt-6 flex w-full items-center justify-center rounded-xl bg-ruet-blue px-4 py-3 text-sm font-bold text-white hover:bg-blue-900 disabled:opacity-70 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400"
+                className="mt-6 flex w-full items-center justify-center rounded-xl bg-ruet-blue px-4 py-3 text-sm font-bold text-white hover:bg-blue-900 disabled:opacity-70 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400 shadow-xl"
               >
-                {isSubmitting ? (
-                  <Loader2 className="animate-spin" size={18} />
-                ) : (
-                  "Initialize Batch"
-                )}
+                {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : "Initialize Batch & Provision Accounts"}
               </button>
             </form>
           </div>

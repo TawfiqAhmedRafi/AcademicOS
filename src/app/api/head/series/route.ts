@@ -4,17 +4,19 @@ import { authOptions } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { logSystemAction } from "@/lib/logger";
+import * as XLSX from "xlsx";
+import bcrypt from "bcryptjs";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!["dept_head", "admin", "advisor", "faculty"].includes(session?.user?.role || "")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
+
   try {
     const client = await clientPromise;
     const db = client.db("academicos");
     
-    // Fetch ONLY active series, sorted newest first
     const series = await db.collection("series")
       .find({ status: "active" })
       .sort({ series: -1 })
@@ -29,55 +31,103 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (session?.user?.role !== "dept_head") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-  
+
   try {
-    const { series, currentSemester } = await req.json();
+    const formData = await req.formData();
+    const series = formData.get("series") as string;
+    const currentSemester = formData.get("currentSemester") as string;
+    const file = formData.get("file") as File;
+
+    if (!series || !currentSemester || !file) {
+      return NextResponse.json({ error: "Missing required fields or Excel file." }, { status: 400 });
+    }
+
     const client = await clientPromise;
     const db = client.db("academicos");
-    
+
     const existing = await db.collection("series").findOne({ series });
     if (existing) return NextResponse.json({ error: "Series already exists" }, { status: 400 });
-    
+
+    // --- NEW: Parse the Student Excel File ---
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: "buffer" });
+    const sheetName = workbook.SheetNames[0];
+    const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+    const studentsToInsert = [];
+
+    for (const row of data as any[]) {
+      // Support flexible column names
+      const roll = row["Roll"] || row["Roll Number"] || row["Student ID"];
+      const name = row["Name"] || row["Student Name"];
+      const regNo = row["Registration Number"] || row["Reg No"]; 
+
+      if (!roll || !name) continue; // Skip empty rows
+
+      const email = `${roll}@student.ruet.ac.bd`;
+      const password_hash = await bcrypt.hash(email, 12); // Temporary pass is their email
+
+      studentsToInsert.push({
+        name: String(name).trim(),
+        email: email.trim(),
+        studentId: String(roll).trim(),
+        student_id: String(roll).trim(), // Supporting your requested exact field
+        regNo: regNo ? String(regNo).trim() : undefined,
+        series: series,
+        password_hash,
+        role: "student",
+        department: "ETE",
+        needs_setup: true, // Forces them to change password on first login
+        loginAttempts: 0,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+    }
+
+    // --- Insert the Series Data ---
     const newSeries = {
       series,
       currentSemester,
       advisor1: null,
       advisor2: null,
-      status: "active", 
+      status: "active",
       registration: { isOpen: false, deadline: null },
       createdAt: new Date(),
       updatedAt: new Date()
     };
-    
+
     await db.collection("series").insertOne(newSeries);
-    await logSystemAction("Series Created", "System", `Series ${series} initialized at semester ${currentSemester}`);
-    
-    return NextResponse.json({ message: "Series created successfully" }, { status: 201 });
-  } catch (error) {
-    return NextResponse.json({ error: "Failed to create series" }, { status: 500 });
+
+    // --- Bulk Insert the Parsed Students ---
+    if (studentsToInsert.length > 0) {
+      await db.collection("users").insertMany(studentsToInsert);
+    }
+
+    await logSystemAction("Series Created", "System", `Series ${series} initialized with ${studentsToInsert.length} students`);
+
+    return NextResponse.json({ message: `Series created and ${studentsToInsert.length} students provisioned successfully.` }, { status: 201 });
+  } catch (error: any) {
+    console.error("Series Initialization Error:", error);
+    return NextResponse.json({ error: error.message || "Failed to create series" }, { status: 500 });
   }
 }
 
 export async function PATCH(req: Request) {
   const session = await getServerSession(authOptions);
   if (session?.user?.role !== "dept_head") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-  
+
   try {
     const { seriesId, action, payload } = await req.json();
     const client = await clientPromise;
     const db = client.db("academicos");
 
     if (action === "update_semester") {
-      // 1. Fetch the series to know what semester we are archiving
       const seriesDoc = await db.collection("series").findOne({ _id: new ObjectId(seriesId) });
       const oldSemester = seriesDoc?.currentSemester;
 
       if (oldSemester) {
-        // 2. Fetch all students in this series
         const students = await db.collection("users").find({ role: "student", series: seriesDoc.series }).toArray();
-
         if (students.length > 0) {
-          // 3. Prepare a Bulk Write to archive their data and reset their active state
           const bulkOps = students.map(student => ({
             updateOne: {
               filter: { _id: student._id },
@@ -103,16 +153,15 @@ export async function PATCH(req: Request) {
         }
       }
 
-      // 4. Update the series to the new semester and automatically lock the gates
       await db.collection("series").updateOne(
         { _id: new ObjectId(seriesId) },
         { $set: { 
-            currentSemester: payload.newSemester, 
-            "registration.isOpen": false,
+             currentSemester: payload.newSemester, 
+             "registration.isOpen": false,
             "formFillup.isOpen": false,
             updatedAt: new Date() 
-          } 
-        }
+           } 
+         }
       );
 
       await logSystemAction("Semester Promoted", "System", `Series ${seriesDoc?.series} advanced from ${oldSemester} to ${payload.newSemester}`);
@@ -129,26 +178,26 @@ export async function PATCH(req: Request) {
     }
 
     if (action === "assign_advisor") {
-      const { slot, advisorEmail, advisorName } = payload; 
+      const { slot, advisorEmail, advisorName } = payload;
       
       const seriesDoc = await db.collection("series").findOne({ _id: new ObjectId(seriesId) });
       const oldEmail = slot === 1 ? seriesDoc?.advisor1?.email : seriesDoc?.advisor2?.email;
+
       const updateFieldEmail = slot === 1 ? "advisor1.email" : "advisor2.email";
       const updateFieldName = slot === 1 ? "advisor1.name" : "advisor2.name";
 
       await db.collection("series").updateOne(
         { _id: new ObjectId(seriesId) },
         { $set: { 
-             [updateFieldEmail]: advisorEmail, 
-             [updateFieldName]: advisorName,
-             updatedAt: new Date() 
-           } 
-         }
+              [updateFieldEmail]: advisorEmail, 
+              [updateFieldName]: advisorName,
+             updatedAt: new Date()
+            } 
+          }
       );
 
       const syncUserRole = async (emailToSync: string) => {
         if (!emailToSync) return;
-
         const userDoc = await db.collection("users").findOne({ email: emailToSync });
         if (!userDoc) return;
 
