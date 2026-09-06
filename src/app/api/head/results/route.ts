@@ -36,28 +36,29 @@ export async function PATCH(req: Request) {
       const draft = await db.collection("draft_results").findOne({ _id: new ObjectId(draftId) });
       if (!draft) return NextResponse.json({ error: "Draft not found" }, { status: 404 });
 
-      // 1. Build the massive BulkWrite array for all students in this series
-      const bulkOps = draft.results.map((res: any) => {
-        
+  // 1. Build the massive BulkWrite array for all students in this series
+      // Use flatMap to allow multiple update operations per student
+      const bulkOps = draft.results.flatMap((res: any) => {
         // Separate passed courses from failed courses to manage backlogs dynamically
         const passedCourses = res.courseGrades.filter((c: any) => c.gradePoint > 0).map((c: any) => c.courseCode);
         const failedCourses = res.failedCourses || [];
 
-       return {
+        const ops = [];
+
+        // Operation A: Push history, update CGPA, reset statuses, and PULL passed backlogs
+        ops.push({
           updateOne: {
             filter: { _id: new ObjectId(res.studentId) },
             update: {
-              // Stamp the permanent transcript (combining regular and backlog grades for the record)
               $push: {
                 academicHistory: {
                   semester: draft.semester,
                   publishedAt: new Date(),
                   semesterGpa: res.semesterGpa,
                   earnedCredits: res.earnedCredits,
-                  courses: [...res.courseGrades, ...res.backlogGrades]
+                  courses: [...res.courseGrades, ...(res.backlogGrades || [])]
                 }
               },
-              // Update CGPA and wipe ALL registration gates clean for the next semester
               $set: {
                 cgpa: res.cgpa,
                 registrationStatus: "unregistered",
@@ -66,17 +67,28 @@ export async function PATCH(req: Request) {
                 backlogRegStatus: "unregistered", 
                 registeredBacklogs: [] 
               },
-              // ADD new backlogs to their profile
-              $addToSet: {
-                activeBacklogs: { $each: failedCourses }
-              },
-              // REMOVE courses from active backlogs if they finally passed them
               $pull: {
                 activeBacklogs: { $in: passedCourses } 
               }
             }
           }
-        };
+        });
+
+        // Operation B: ADD new failed courses to active backlogs (only if they failed any)
+        if (failedCourses.length > 0) {
+          ops.push({
+            updateOne: {
+              filter: { _id: new ObjectId(res.studentId) },
+              update: {
+                $addToSet: {
+                  activeBacklogs: { $each: failedCourses }
+                }
+              }
+            }
+          });
+        }
+
+        return ops;
       });
 
       // 2. Execute the Bulk Write
