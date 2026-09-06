@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="Tabulation_Series_${series}_Sem_${semester}.pdf"`,
+        "Content-Disposition": `attachment; filename="Result_Sheet_Series_${series}_Sem_${semester}.pdf"`,
         "Cache-Control": "no-store",
       },
     });

@@ -32,7 +32,7 @@ export async function generateTabulationPdf(draft: any): Promise<Buffer> {
     <div class="header">
       <h1>Rajshahi University of Engineering & Technology</h1>
       <h2>Department of Electronics & Telecommunication Engineering</h2>
-      <h3>OFFICIAL TABULATION SHEET</h3>
+      <h3>OFFICIAL RESULT SHEET</h3>
     </div>
     <div class="meta">
       <span>Series: ${escapeHtml(draft.series)}</span>

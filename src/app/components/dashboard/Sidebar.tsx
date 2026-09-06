@@ -47,7 +47,7 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
 
   const advisorLinks = [
     { name: "Series Roster", href: "/dashboard/roster", icon: Users },
-    { name: "Tabulation Engine", href: "/dashboard/tabulation", icon: Calculator },
+    { name: "Result Engine", href: "/dashboard/tabulation", icon: Calculator },
     { name: "Pending Approvals", href: "/dashboard/approvals", icon: CheckSquare },
   ];
 

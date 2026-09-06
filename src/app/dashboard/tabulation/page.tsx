@@ -52,7 +52,7 @@ export default function TabulationEnginePage() {
       body: JSON.stringify({ series: activeConfig.series, semester: activeConfig.currentSemester })
     });
     if (res.ok) {
-      showToast("Draft Tabulation Sheet compiled!", "success");
+      showToast("Draft Result Sheet compiled!", "success");
       await fetchDraft(activeConfig.series, activeConfig.currentSemester);
     } else {
       const data = await res.json();
@@ -119,8 +119,8 @@ export default function TabulationEnginePage() {
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       <div className="mb-8">
-        <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white">Tabulation Engine</h1>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Compile aggregated faculty marks into the official Draft Tabulation Sheet.</p>
+        <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white">Result Engine</h1>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Compile aggregated faculty marks into the official Draft Result Sheet.</p>
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-4 mb-6 custom-scrollbar">

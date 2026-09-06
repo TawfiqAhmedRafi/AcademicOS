@@ -11,30 +11,31 @@ export async function GET() {
     const client = await clientPromise;
     const db = client.db("academicos");
 
-    // 1. Get the logged-in student's document
     const user = await db.collection("users").findOne({ email: session.user.email });
     if (!user || !user.series) return NextResponse.json({ error: "Student series not found" }, { status: 404 });
 
-    // 2. Get the global config for their series (to check if open, and what semester it is)
     const seriesConfig = await db.collection("series").findOne({ series: user.series });
     if (!seriesConfig) return NextResponse.json({ error: "Series configuration not found" }, { status: 404 });
 
-    // 3. Fetch the curriculum for their specific active semester
     const courses = await db.collection("courses").find({ 
       $or: [
         { semester: seriesConfig.currentSemester },
-        { level: seriesConfig.currentSemester } // Fallback for legacy schemas
+        { level: seriesConfig.currentSemester } 
       ]
     }).sort({ courseCode: 1 }).toArray();
+
+   // --- NEW: Fetch the entire catalog to map historical titles ---
+    const allCourses = await db.collection("courses").find({}).project({ courseCode: 1, title: 1, credits: 1 }).toArray();
 
     return NextResponse.json({
       status: user.registrationStatus || "unregistered",
       registeredCourses: user.registeredCourses || [],
+      academicHistory: user.academicHistory || [],
       seriesConfig,
-      courses
+      courses,
+      allCourses // <-- Export it here
     });
   } catch (error) {
-    console.error("Student Registration Fetch Error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
@@ -48,7 +49,6 @@ export async function POST(req: Request) {
     const client = await clientPromise;
     const db = client.db("academicos");
 
-    // Update the student's status to "pending" so it shows up in the Advisor's queue
     await db.collection("users").updateOne(
       { email: session.user.email },
       { $set: { 
@@ -58,7 +58,6 @@ export async function POST(req: Request) {
         } 
       }
     );
-
     return NextResponse.json({ message: "Registration submitted successfully to Advisor." });
   } catch (error) {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
