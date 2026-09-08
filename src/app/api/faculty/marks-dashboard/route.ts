@@ -42,27 +42,69 @@ export async function GET() {
     const courseMap = new Map();
     
     if (orConditions.length > 0 && initials) {
-      const slots = await db.collection("routine_slots").find({ $or: orConditions, teachers: initials }).toArray();
+      const slots = await db.collection("routine_slots").find({
+        $and: [
+          { $or: orConditions },
+          {
+            $or: [
+              { teachers: initials },
+              { type: { $in: ["project", "thesis", "seminar"] } }
+            ]
+          }
+        ]
+      }).toArray();
       
       slots.forEach(slot => {
-        const key = `reg-${slot.series}-${slot.courseCode}`;
-        const isLocked = activeDrafts.some(draft => draft.series === slot.series && draft.semester === slot.semester);
+        let extractedCodes = new Set<string>();
+        const isSpecial = ["project", "thesis", "seminar"].includes(slot.type);
 
-        if (!courseMap.has(key)) {
-          courseMap.set(key, {
-            uniqueId: slot._id.toString(),
-            courseCode: slot.courseCode,
-            title: slot.courseName || slot.courseCode,
-            series: slot.series,
-            type: slot.type || 'theory',
-            isSpecial: ["project", "thesis", "seminar"].includes(slot.type),
-            teacherCount: slot.teachers?.length || 1,
-            completedSegments: slot.completedSegments || [],
-            isXXPending: slot.courseCode.includes("XX"),
-            isLocked,
-            isBacklog: false
-          });
+        // --- SMART INTERCEPT: Handle Split Courses (e.g. "ETE 2110 / ETE 2114") ---
+        if (slot.isSplit && slot.splitTeachers && Array.isArray(slot.splitTeachers)) {
+            // Split the code string by either "/" or "," to make it robust
+            const splitCourseList = slot.courseCode.split(/[,/]+/).map((c: string) => c.trim()).filter(Boolean);
+            
+            if (isSpecial) {
+                // Broadcast courses show all parts to everyone
+                splitCourseList.forEach((c: string) => extractedCodes.add(c));
+            } else {
+                // Map the specific teacher's initials to the exact course in the split array
+                slot.splitTeachers.forEach((teacherGroup: any, index: number) => {
+                    if ((Array.isArray(teacherGroup) && teacherGroup.includes(initials)) || 
+                        (typeof teacherGroup === 'string' && teacherGroup.includes(initials))) {
+                        extractedCodes.add(splitCourseList[index] || slot.courseCode);
+                    }
+                });
+                
+                // Fallback just in case
+                if (extractedCodes.size === 0 && slot.teachers?.includes(initials)) {
+                    extractedCodes.add(slot.courseCode);
+                }
+            }
+        } else {
+            extractedCodes.add(slot.courseCode); // Normal Course
         }
+
+        // Process each cleanly extracted code
+        extractedCodes.forEach(extractedCode => {
+            const key = `reg-${slot.series}-${extractedCode}`;
+            const isLocked = activeDrafts.some(draft => draft.series === slot.series && draft.semester === slot.semester);
+
+            if (!courseMap.has(key)) {
+              courseMap.set(key, {
+                uniqueId: slot._id.toString(),
+                courseCode: extractedCode, // <-- Emits only the isolated course code!
+                title: slot.courseName || extractedCode,
+                series: slot.series,
+                type: slot.type || 'theory',
+                isSpecial,
+                teacherCount: slot.teachers?.length || 1,
+                completedSegments: slot.completedSegments || [],
+                isXXPending: extractedCode.includes("XX"),
+                isLocked,
+                isBacklog: false
+              });
+            }
+        });
       });
     }
 
@@ -77,7 +119,6 @@ export async function GET() {
     }).toArray();
 
     if (backlogStudents.length > 0 && initials) {
-      // Map all registered backlog IDs to exact Course Codes
       const allBacklogRefs = Array.from(new Set(backlogStudents.flatMap(s => s.registeredBacklogs || [])));
       const backlogCourseDocs = await db.collection("courses").find({
         $or: [
@@ -94,39 +135,65 @@ export async function GET() {
         return { ...s, backlogCodes: codes };
       });
 
-      // Find all historical slots taught by this teacher for active series
       const teacherHistoricalSlots = await db.collection("routine_slots").find({
-        series: { $in: activeSeries.map(s => Number(s.series)) },
-        teachers: initials
+        $and: [
+          { series: { $in: activeSeries.map(s => Number(s.series)) } },
+          {
+            $or: [
+              { teachers: initials },
+              { type: { $in: ["project", "thesis", "seminar"] } }
+            ]
+          }
+        ]
       }).toArray();
 
       teacherHistoricalSlots.forEach(slot => {
-        // Find students in this slot's series who failed this specific course
-        const relevantStudents = studentsWithBacklogCodes.filter(s => Number(s.series) === slot.series && s.backlogCodes.includes(slot.courseCode));
-        
-        if (relevantStudents.length > 0) {
-          const key = `backlog-${slot.series}-${slot.courseCode}`;
-          // Backlogs lock when the current active semester for that series is compiled
-          const activeSem = activeSeries.find(s => Number(s.series) === slot.series)?.currentSemester;
-          const isLocked = activeDrafts.some(draft => draft.series === slot.series && draft.semester === activeSem);
+        let extractedCodes = new Set<string>();
+        const isSpecial = ["project", "thesis", "seminar"].includes(slot.type);
 
-          if (!courseMap.has(key)) {
-            courseMap.set(key, {
-              uniqueId: `bklg_${slot._id.toString()}`,
-              courseCode: slot.courseCode,
-              title: slot.courseName || slot.courseCode,
-              series: slot.series,
-              type: slot.type || 'theory',
-              isSpecial: false,
-              teacherCount: 1, // Only 1 examiner for backlogs
-              completedSegments: slot.completedBacklogSegments || [], 
-              isXXPending: false,
-              isLocked,
-              isBacklog: true,
-              studentCount: relevantStudents.length // Show script count to teacher
-            });
-          }
+        // --- SMART INTERCEPT: Backlog extraction ---
+        if (slot.isSplit && slot.splitTeachers && Array.isArray(slot.splitTeachers)) {
+            const splitCourseList = slot.courseCode.split(/[,/]+/).map((c: string) => c.trim()).filter(Boolean);
+            if (isSpecial) {
+                splitCourseList.forEach((c: string) => extractedCodes.add(c));
+            } else {
+                slot.splitTeachers.forEach((teacherGroup: any, index: number) => {
+                    if ((Array.isArray(teacherGroup) && teacherGroup.includes(initials)) || 
+                        (typeof teacherGroup === 'string' && teacherGroup.includes(initials))) {
+                        extractedCodes.add(splitCourseList[index] || slot.courseCode);
+                    }
+                });
+            }
+        } else {
+            extractedCodes.add(slot.courseCode);
         }
+
+        extractedCodes.forEach(extractedCode => {
+            const relevantStudents = studentsWithBacklogCodes.filter(s => Number(s.series) === slot.series && s.backlogCodes.includes(extractedCode));
+            
+            if (relevantStudents.length > 0) {
+              const key = `backlog-${slot.series}-${extractedCode}`;
+              const activeSem = activeSeries.find(s => Number(s.series) === slot.series)?.currentSemester;
+              const isLocked = activeDrafts.some(draft => draft.series === slot.series && draft.semester === activeSem);
+
+              if (!courseMap.has(key)) {
+                courseMap.set(key, {
+                  uniqueId: `bklg_${slot._id.toString()}_${extractedCode}`, 
+                  courseCode: extractedCode,
+                  title: slot.courseName || extractedCode,
+                  series: slot.series,
+                  type: slot.type || 'theory',
+                  isSpecial,
+                  teacherCount: 1, 
+                  completedSegments: slot.completedBacklogSegments || [], 
+                  isXXPending: false,
+                  isLocked,
+                  isBacklog: true,
+                  studentCount: relevantStudents.length
+                });
+              }
+            }
+        });
       });
     }
 
@@ -138,7 +205,6 @@ export async function GET() {
 }
 
 export async function PATCH(req: Request) {
-  // ... [Keep your existing PATCH code exactly as is for XX resolution] ...
   const session = await getServerSession(authOptions);
   if (!session || !["faculty", "dept_head", "advisor"].includes(session.user.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 

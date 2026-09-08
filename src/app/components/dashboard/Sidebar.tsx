@@ -51,7 +51,7 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
     { name: "Series Roster", href: "/dashboard/roster", icon: Users },
     { name: "Result Engine", href: "/dashboard/tabulation", icon: Calculator },
     { name: "Pending Approvals", href: "/dashboard/approvals", icon: CheckSquare },
-    { name: "Calendar Builder", href: "/dashboard/calendar-builder", icon: CalendarDays },
+    { name: "Academic Calendar Builder", href: "/dashboard/calendar-builder", icon: CalendarDays },
   ];
 
   const deptHeadLinks = [
