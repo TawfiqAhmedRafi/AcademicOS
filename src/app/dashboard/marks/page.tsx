@@ -1,16 +1,30 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Loader2, Download, Upload, CheckCircle2, EyeOff, FileSpreadsheet, AlertCircle, Check, Filter, Lock, BookOpen, ShieldAlert } from "lucide-react";
+import {
+  Loader2,
+  Download,
+  Upload,
+  CheckCircle2,
+  EyeOff,
+  FileSpreadsheet,
+  AlertCircle,
+  Check,
+  Filter,
+  Lock,
+  BookOpen,
+  ShieldAlert,
+} from "lucide-react";
 import { useToast } from "@/app/components/ToastProvider";
 import DropdownFilter from "@/app/components/DropdownFilter";
+import Swal from "sweetalert2";
 
 type MarkCourse = {
   uniqueId: string;
   courseCode: string;
   title: string;
   series: number;
-  type: 'theory' | 'sessional' | 'special';
+  type: "theory" | "sessional" | "special";
   isSpecial: boolean;
   teacherCount: number;
   completedSegments: string[];
@@ -23,7 +37,7 @@ type MarkCourse = {
 // Dynamic Segments based on Course Code Patterns & Teacher Count
 const getSegments = (course: MarkCourse) => {
   if (course.isBacklog) {
-      return ["Semester Final (Backlog)"]; 
+    return ["Semester Final (Backlog)"];
   }
 
   const code = (course.courseCode || "").toUpperCase();
@@ -43,37 +57,68 @@ const getSegments = (course: MarkCourse) => {
   }
 
   // --- REGULAR THEORY ---
-  if (course.type === 'theory') {
-    if (course.teacherCount > 1) return ["Class Tests (2)", "Assignment", "Attendance", "Semester Final (Part)"];
-    return ["Class Tests (4)", "Assignment", "Attendance", "Semester Final (Full)"];
+  if (course.type === "theory") {
+    if (course.teacherCount > 1)
+      return [
+        "Class Tests (2)",
+        "Assignment",
+        "Attendance",
+        "Semester Final (Part)",
+      ];
+    return [
+      "Class Tests (4)",
+      "Assignment",
+      "Attendance",
+      "Semester Final (Full)",
+    ];
   }
-  
+
   // --- STANDARD SESSIONAL/LAB ---
-  return ["Attendance", "Quiz", "Lab Report", "Performance", "Lab Viva", "Lab Final", "Board Viva"];
+  return [
+    "Attendance",
+    "Quiz",
+    "Lab Report",
+    "Performance",
+    "Lab Viva",
+    "Lab Final",
+    "Board Viva",
+  ];
 };
 
 export default function FacultyMarksDashboard() {
   const [courses, setCourses] = useState<MarkCourse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'regular' | 'backlog'>('regular');
-  
+  const [activeTab, setActiveTab] = useState<"regular" | "backlog">("regular");
+
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadTarget, setUploadTarget] = useState<{ courseCode: string, series: number, segment: string, isBacklog: boolean } | null>(null);
-  
+  const [uploadTarget, setUploadTarget] = useState<{
+    courseCode: string;
+    series: number;
+    segment: string;
+    isBacklog: boolean;
+  } | null>(null);
+
   const { showToast } = useToast();
   const [seriesFilter, setSeriesFilter] = useState("All");
 
-  const uniqueSeries = Array.from(new Set(courses.map(c => c.series))).sort((a, b) => a - b);
+  const uniqueSeries = Array.from(new Set(courses.map((c) => c.series))).sort(
+    (a, b) => a - b,
+  );
   const seriesOptions = [
     { label: "All Batches", value: "All" },
-    ...uniqueSeries.map(s => ({ label: `Series ${s}`, value: String(s) }))
+    ...uniqueSeries.map((s) => ({ label: `Series ${s}`, value: String(s) })),
   ];
 
-  const filteredCourses = courses.filter(c => seriesFilter === "All" || String(c.series) === seriesFilter);
-  const displayCourses = activeTab === 'regular' ? filteredCourses.filter(c => !c.isBacklog) : filteredCourses.filter(c => c.isBacklog);
-  
-  const backlogCount = courses.filter(c => c.isBacklog).length;
+  const filteredCourses = courses.filter(
+    (c) => seriesFilter === "All" || String(c.series) === seriesFilter,
+  );
+  const displayCourses =
+    activeTab === "regular"
+      ? filteredCourses.filter((c) => !c.isBacklog)
+      : filteredCourses.filter((c) => c.isBacklog);
+
+  const backlogCount = courses.filter((c) => c.isBacklog).length;
 
   const fetchCourses = async (showSpinner = true) => {
     if (showSpinner) setIsLoading(true);
@@ -85,15 +130,27 @@ export default function FacultyMarksDashboard() {
     if (showSpinner) setIsLoading(false);
   };
 
-  useEffect(() => { fetchCourses(true); }, []);
+  useEffect(() => {
+    fetchCourses(true);
+  }, []);
 
   const handleHideCourse = async (uniqueId: string) => {
-    if (!confirm("Remove this course from your dashboard? You should only do this once all your marks are uploaded.")) return;
-    setCourses(prev => prev.filter(c => c.uniqueId !== uniqueId));
+    const result = await Swal.fire({
+      title: "Remove course?",
+      text: "You should only do this once all your marks are uploaded.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, remove it",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#d33",
+    });
+
+    if (!result.isConfirmed) return;
+    setCourses((prev) => prev.filter((c) => c.uniqueId !== uniqueId));
     await fetch("/api/faculty/marks-dashboard", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "hide", uniqueId })
+      body: JSON.stringify({ action: "hide", uniqueId }),
     });
     showToast("Course hidden.", "success");
   };
@@ -104,14 +161,18 @@ export default function FacultyMarksDashboard() {
     const res = await fetch("/api/faculty/marks-dashboard", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "resolve_xx", uniqueId, resolvedCode: value.toUpperCase() })
+      body: JSON.stringify({
+        action: "resolve_xx",
+        uniqueId,
+        resolvedCode: value.toUpperCase(),
+      }),
     });
     if (res.ok) {
       showToast("Course code locked in!", "success");
-      fetchCourses(false); 
+      fetchCourses(false);
     } else {
-        const data = await res.json();
-        showToast(data.error || "Failed to validate code.", "error");
+      const data = await res.json();
+      showToast(data.error || "Failed to validate code.", "error");
     }
   };
 
@@ -119,9 +180,12 @@ export default function FacultyMarksDashboard() {
     showToast(`Generating template for ${course.courseCode}...`, "info");
     try {
       // Pass the isBacklog flag to ensure the backend filters the Excel rows!
-      const res = await fetch(`/api/faculty/template?courseCode=${encodeURIComponent(course.courseCode)}&series=${course.series}&segment=${encodeURIComponent(segment)}&isBacklog=${course.isBacklog ? 'true' : 'false'}`);
-      if (!res.ok) throw new Error(await res.text() || "Failed to generate template");
-      
+      const res = await fetch(
+        `/api/faculty/template?courseCode=${encodeURIComponent(course.courseCode)}&series=${course.series}&segment=${encodeURIComponent(segment)}&isBacklog=${course.isBacklog ? "true" : "false"}`,
+      );
+      if (!res.ok)
+        throw new Error((await res.text()) || "Failed to generate template");
+
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -137,7 +201,12 @@ export default function FacultyMarksDashboard() {
   };
 
   const triggerUploadClick = (course: MarkCourse, segment: string) => {
-    setUploadTarget({ courseCode: course.courseCode, series: course.series, segment, isBacklog: !!course.isBacklog });
+    setUploadTarget({
+      courseCode: course.courseCode,
+      series: course.series,
+      segment,
+      isBacklog: !!course.isBacklog,
+    });
     if (fileInputRef.current) fileInputRef.current.click();
   };
 
@@ -156,32 +225,47 @@ export default function FacultyMarksDashboard() {
     formData.append("isBacklog", String(uploadTarget.isBacklog));
 
     try {
-       const res = await fetch("/api/faculty/upload-marks", { method: "POST", body: formData });
-       const data = await res.json();
-       if (!res.ok) throw new Error(data.error || "Upload failed");
-       
-       showToast(data.message, "success");
-       fetchCourses(false); 
+      const res = await fetch("/api/faculty/upload-marks", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+
+      showToast(data.message, "success");
+      fetchCourses(false);
     } catch (err: any) {
-       showToast(err.message, "error");
+      showToast(err.message, "error");
     } finally {
-       setIsUploading(false);
-       setUploadTarget(null);
-       if (fileInputRef.current) fileInputRef.current.value = ""; 
+      setIsUploading(false);
+      setUploadTarget(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  if (isLoading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="animate-spin text-ruet-blue dark:text-ruet-gold" size={32} /></div>;
+  if (isLoading)
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <Loader2
+          className="animate-spin text-ruet-blue dark:text-ruet-gold"
+          size={32}
+        />
+      </div>
+    );
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
-      
       <div className="mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white">Marks Upload Portal</h1>
-          <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Download Excel templates, input your marks, and upload securely to the engine.</p>
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white">
+            Marks Upload Portal
+          </h1>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+            Download Excel templates, input your marks, and upload securely to
+            the engine.
+          </p>
         </div>
-        
+
         {courses.length > 0 && (
           <DropdownFilter
             icon={<Filter size={16} />}
@@ -194,26 +278,37 @@ export default function FacultyMarksDashboard() {
 
       {/* Tabs */}
       <div className="flex gap-4 border-b border-slate-200 dark:border-white/10 mb-8">
-        <button 
-          onClick={() => setActiveTab('regular')}
-          className={`pb-4 px-2 text-sm font-bold flex items-center gap-2 transition-colors border-b-2 ${activeTab === 'regular' ? 'border-ruet-blue text-ruet-blue dark:border-ruet-gold dark:text-ruet-gold' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
+        <button
+          onClick={() => setActiveTab("regular")}
+          className={`pb-4 px-2 text-sm font-bold flex items-center gap-2 transition-colors border-b-2 ${activeTab === "regular" ? "border-ruet-blue text-ruet-blue dark:border-ruet-gold dark:text-ruet-gold" : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"}`}
         >
           <BookOpen size={16} /> Regular Schedule
         </button>
-        <button 
-          onClick={() => setActiveTab('backlog')}
-          className={`pb-4 px-2 text-sm font-bold flex items-center gap-2 transition-colors border-b-2 ${activeTab === 'backlog' ? 'border-ruet-blue text-ruet-blue dark:border-ruet-gold dark:text-ruet-gold' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
+        <button
+          onClick={() => setActiveTab("backlog")}
+          className={`pb-4 px-2 text-sm font-bold flex items-center gap-2 transition-colors border-b-2 ${activeTab === "backlog" ? "border-ruet-blue text-ruet-blue dark:border-ruet-gold dark:text-ruet-gold" : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"}`}
         >
           <ShieldAlert size={16} /> Backlog Exams
-          {backlogCount > 0 && <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-[10px] dark:bg-amber-500/20 dark:text-amber-400">{backlogCount}</span>}
+          {backlogCount > 0 && (
+            <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-[10px] dark:bg-amber-500/20 dark:text-amber-400">
+              {backlogCount}
+            </span>
+          )}
         </button>
       </div>
 
       {displayCourses.length === 0 ? (
         <div className="glass-panel py-24 text-center rounded-3xl flex flex-col items-center">
-          <CheckCircle2 size={48} className="text-emerald-500 mb-4 opacity-50" />
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white">All Caught Up!</h2>
-          <p className="text-slate-500 mt-2">You have no pending assignments in this category.</p>
+          <CheckCircle2
+            size={48}
+            className="text-emerald-500 mb-4 opacity-50"
+          />
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+            All Caught Up!
+          </h2>
+          <p className="text-slate-500 mt-2">
+            You have no pending assignments in this category.
+          </p>
         </div>
       ) : (
         <div className="space-y-8">
@@ -223,100 +318,185 @@ export default function FacultyMarksDashboard() {
               return a.courseCode.localeCompare(b.courseCode);
             })
             .map((course) => {
-            const segments = getSegments(course);
+              const segments = getSegments(course);
 
-            return (
-              <div key={course.uniqueId} className="glass-panel rounded-3xl overflow-hidden border border-slate-200 dark:border-white/10 shadow-lg">
-                <div className={`px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-white/10 ${course.isBacklog ? 'bg-amber-50/50 dark:bg-amber-500/5' : course.isSpecial ? 'bg-purple-50/50 dark:bg-purple-500/5' : course.type === 'theory' ? 'bg-blue-50/50 dark:bg-blue-500/5' : 'bg-emerald-50/50 dark:bg-emerald-500/5'}`}>
-                  <div>
-                    <div className="flex items-center gap-3 mb-1">
-                      
-                      {course.isXXPending ? (
-                        <input 
-                          type="text" 
-                          placeholder="Type Exact Code (e.g. ETE 3212)" 
-                          className="px-2 py-1 text-sm font-bold border border-amber-300 rounded focus:outline-none focus:border-amber-500 bg-amber-50 dark:bg-amber-900/30 text-amber-900 dark:text-amber-100 placeholder:font-normal"
-                          onBlur={(e) => handleResolveXX(course.uniqueId, e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') handleResolveXX(course.uniqueId, e.currentTarget.value); }}
-                        />
-                      ) : (
-                        <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{course.courseCode}</h2>
-                      )}
+              return (
+                <div
+                  key={course.uniqueId}
+                  className="glass-panel rounded-3xl overflow-hidden border border-slate-200 dark:border-white/10 shadow-lg"
+                >
+                  <div
+                    className={`px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-white/10 ${course.isBacklog ? "bg-amber-50/50 dark:bg-amber-500/5" : course.isSpecial ? "bg-purple-50/50 dark:bg-purple-500/5" : course.type === "theory" ? "bg-blue-50/50 dark:bg-blue-500/5" : "bg-emerald-50/50 dark:bg-emerald-500/5"}`}
+                  >
+                    <div>
+                      <div className="flex items-center gap-3 mb-1">
+                        {course.isXXPending ? (
+                          <input
+                            type="text"
+                            placeholder="Type Exact Code (e.g. ETE 3212)"
+                            className="px-2 py-1 text-sm font-bold border border-amber-300 rounded focus:outline-none focus:border-amber-500 bg-amber-50 dark:bg-amber-900/30 text-amber-900 dark:text-amber-100 placeholder:font-normal"
+                            onBlur={(e) =>
+                              handleResolveXX(course.uniqueId, e.target.value)
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter")
+                                handleResolveXX(
+                                  course.uniqueId,
+                                  e.currentTarget.value,
+                                );
+                            }}
+                          />
+                        ) : (
+                          <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                            {course.courseCode}
+                          </h2>
+                        )}
 
-                      <span className="bg-slate-900 text-white dark:bg-white dark:text-black px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest">Series {course.series}</span>
-                      
-                      {course.isBacklog ? (
-                         <span className="bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                            <Users size={10}/> {course.studentCount} Scripts
-                         </span>
-                      ) : (
-                         <span className="bg-slate-200 text-slate-700 dark:bg-white/20 dark:text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase">{course.type}</span>
-                      )}
+                        <span className="bg-slate-900 text-white dark:bg-white dark:text-black px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest">
+                          Series {course.series}
+                        </span>
 
-                    </div>
-                    <p className="text-sm font-medium text-slate-600 dark:text-slate-400 line-clamp-1">{course.title}</p>
-                  </div>
-                  {!course.isBacklog && (
-                     <button onClick={() => handleHideCourse(course.uniqueId)} className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"><EyeOff size={14} /> Remove</button>
-                  )}
-                </div>
-
-                {course.isXXPending && (
-                  <div className="bg-amber-50 dark:bg-amber-500/10 p-3 flex items-center gap-2 border-b border-amber-100 dark:border-amber-500/20">
-                    <AlertCircle size={16} className="text-amber-600 dark:text-amber-400" />
-                    <span className="text-xs font-semibold text-amber-800 dark:text-amber-200">Enter exact course code above to unlock uploads. Press Enter to save.</span>
-                  </div>
-                )}
-                
-                {course.isLocked && (
-                  <div className="bg-red-50 dark:bg-red-500/10 p-3 flex items-center gap-2 border-b border-red-100 dark:border-red-500/20">
-                    <Lock size={16} className="text-red-600 dark:text-red-400" />
-                    <span className="text-xs font-semibold text-red-800 dark:text-red-200">Tabulation Lockout: The Course Advisor is compiling the draft. Uploads are locked.</span>
-                  </div>
-                )}
-
-                <div className={`p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${course.isXXPending ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-                  {segments.map((segment, idx) => {
-                    const isCompleted = course.completedSegments.includes(segment);
-                    
-                    return (
-                      <div key={idx} className={`bg-slate-50 dark:bg-black/20 rounded-2xl p-4 border transition-colors flex flex-col justify-between ${isCompleted ? 'border-emerald-500/50 bg-emerald-50/30 dark:bg-emerald-500/5' : 'border-slate-200 dark:border-white/5'}`}>
-                        <div className="mb-4 flex justify-between items-start">
-                          <div>
-                            <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm mb-1">{segment}</h4>
-                            {segment === "Attendance" && !course.isBacklog && <p className="text-[10px] text-slate-500">Template requires Total & Attended.</p>}
-                          </div>
-                          {isCompleted && <CheckCircle2 size={18} className="text-emerald-500 flex-shrink-0" />}
-                        </div>
-                        
-                        <div className="flex flex-col gap-2 mt-auto">
-                          <button onClick={() => handleDownloadDemo(course, segment)} className="w-full flex items-center justify-center gap-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 py-2 rounded-xl text-xs font-bold transition-colors">
-                            <FileSpreadsheet size={14} className={course.isBacklog ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"} /> Template
-                          </button>
-                          
-                          <button 
-                            onClick={() => triggerUploadClick(course, segment)}
-                            disabled={isUploading || course.isLocked}
-                            className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-colors shadow-sm disabled:opacity-50 ${course.isLocked ? 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed' : isCompleted ? 'bg-slate-800 text-white hover:bg-slate-700 dark:bg-white dark:text-black dark:hover:bg-slate-200' : 'bg-ruet-blue text-white hover:bg-blue-900 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400'}`}
-                          >
-                            {isUploading && uploadTarget?.segment === segment && uploadTarget?.courseCode === course.courseCode ? (
-                              <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                              course.isLocked ? <Lock size={14} /> : isCompleted ? <Check size={14} /> : <Upload size={14} />
-                            )}
-                            {course.isLocked ? "Locked" : isCompleted ? "Update Marks" : "Upload Marks"}
-                          </button>
-                        </div>
+                        {course.isBacklog ? (
+                          <span className="bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                            <Users size={10} /> {course.studentCount} Scripts
+                          </span>
+                        ) : (
+                          <span className="bg-slate-200 text-slate-700 dark:bg-white/20 dark:text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase">
+                            {course.type}
+                          </span>
+                        )}
                       </div>
-                    );
-                  })}
+                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400 line-clamp-1">
+                        {course.title}
+                      </p>
+                    </div>
+                    {!course.isBacklog && (
+                      <button
+                        onClick={() => handleHideCourse(course.uniqueId)}
+                        className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
+                      >
+                        <EyeOff size={14} /> Remove
+                      </button>
+                    )}
+                  </div>
+
+                  {course.isXXPending && (
+                    <div className="bg-amber-50 dark:bg-amber-500/10 p-3 flex items-center gap-2 border-b border-amber-100 dark:border-amber-500/20">
+                      <AlertCircle
+                        size={16}
+                        className="text-amber-600 dark:text-amber-400"
+                      />
+                      <span className="text-xs font-semibold text-amber-800 dark:text-amber-200">
+                        Enter exact course code above to unlock uploads. Press
+                        Enter to save.
+                      </span>
+                    </div>
+                  )}
+
+                  {course.isLocked && (
+                    <div className="bg-red-50 dark:bg-red-500/10 p-3 flex items-center gap-2 border-b border-red-100 dark:border-red-500/20">
+                      <Lock
+                        size={16}
+                        className="text-red-600 dark:text-red-400"
+                      />
+                      <span className="text-xs font-semibold text-red-800 dark:text-red-200">
+                        Tabulation Lockout: The Course Advisor is compiling the
+                        draft. Uploads are locked.
+                      </span>
+                    </div>
+                  )}
+
+                  <div
+                    className={`p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${course.isXXPending ? "opacity-50 pointer-events-none grayscale" : ""}`}
+                  >
+                    {segments.map((segment, idx) => {
+                      const isCompleted =
+                        course.completedSegments.includes(segment);
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`bg-slate-50 dark:bg-black/20 rounded-2xl p-4 border transition-colors flex flex-col justify-between ${isCompleted ? "border-emerald-500/50 bg-emerald-50/30 dark:bg-emerald-500/5" : "border-slate-200 dark:border-white/5"}`}
+                        >
+                          <div className="mb-4 flex justify-between items-start">
+                            <div>
+                              <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm mb-1">
+                                {segment}
+                              </h4>
+                              {segment === "Attendance" &&
+                                !course.isBacklog && (
+                                  <p className="text-[10px] text-slate-500">
+                                    Template requires Total & Attended.
+                                  </p>
+                                )}
+                            </div>
+                            {isCompleted && (
+                              <CheckCircle2
+                                size={18}
+                                className="text-emerald-500 flex-shrink-0"
+                              />
+                            )}
+                          </div>
+
+                          <div className="flex flex-col gap-2 mt-auto">
+                            <button
+                              onClick={() =>
+                                handleDownloadDemo(course, segment)
+                              }
+                              className="w-full flex items-center justify-center gap-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 py-2 rounded-xl text-xs font-bold transition-colors"
+                            >
+                              <FileSpreadsheet
+                                size={14}
+                                className={
+                                  course.isBacklog
+                                    ? "text-amber-600 dark:text-amber-400"
+                                    : "text-emerald-600 dark:text-emerald-400"
+                                }
+                              />{" "}
+                              Template
+                            </button>
+
+                            <button
+                              onClick={() =>
+                                triggerUploadClick(course, segment)
+                              }
+                              disabled={isUploading || course.isLocked}
+                              className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-colors shadow-sm disabled:opacity-50 ${course.isLocked ? "bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed" : isCompleted ? "bg-slate-800 text-white hover:bg-slate-700 dark:bg-white dark:text-black dark:hover:bg-slate-200" : "bg-ruet-blue text-white hover:bg-blue-900 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400"}`}
+                            >
+                              {isUploading &&
+                              uploadTarget?.segment === segment &&
+                              uploadTarget?.courseCode === course.courseCode ? (
+                                <Loader2 size={14} className="animate-spin" />
+                              ) : course.isLocked ? (
+                                <Lock size={14} />
+                              ) : isCompleted ? (
+                                <Check size={14} />
+                              ) : (
+                                <Upload size={14} />
+                              )}
+                              {course.isLocked
+                                ? "Locked"
+                                : isCompleted
+                                  ? "Update Marks"
+                                  : "Upload Marks"}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
         </div>
       )}
-      <input type="file" accept=".xlsx, .xls" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+      <input
+        type="file"
+        accept=".xlsx, .xls"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        className="hidden"
+      />
     </div>
   );
 }
