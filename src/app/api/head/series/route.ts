@@ -16,12 +16,7 @@ export async function GET() {
   try {
     const client = await clientPromise;
     const db = client.db("academicos");
-    
-    const series = await db.collection("series")
-      .find({ status: "active" })
-      .sort({ series: -1 })
-      .toArray();
-      
+    const series = await db.collection("series").find({ status: "active" }).sort({ series: -1 }).toArray();
     return NextResponse.json(series);
   } catch (error) {
     return NextResponse.json({ error: "Failed to fetch series" }, { status: 500 });
@@ -29,6 +24,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  // ... [Keep your exact existing POST function for Excel Upload here] ...
   const session = await getServerSession(authOptions);
   if (session?.user?.role !== "dept_head") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
@@ -48,7 +44,6 @@ export async function POST(req: Request) {
     const existing = await db.collection("series").findOne({ series });
     if (existing) return NextResponse.json({ error: "Series already exists" }, { status: 400 });
 
-    // --- NEW: Parse the Student Excel File ---
     const buffer = await file.arrayBuffer();
     const workbook = XLSX.read(buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
@@ -57,34 +52,32 @@ export async function POST(req: Request) {
     const studentsToInsert = [];
 
     for (const row of data as any[]) {
-      // Support flexible column names
       const roll = row["Roll"] || row["Roll Number"] || row["Student ID"];
       const name = row["Name"] || row["Student Name"];
       const regNo = row["Registration Number"] || row["Reg No"]; 
 
-      if (!roll || !name) continue; // Skip empty rows
+      if (!roll || !name) continue; 
 
       const email = `${roll}@student.ruet.ac.bd`;
-      const password_hash = await bcrypt.hash(email, 12); // Temporary pass is their email
+      const password_hash = await bcrypt.hash(email, 12); 
 
       studentsToInsert.push({
         name: String(name).trim(),
         email: email.trim(),
         studentId: String(roll).trim(),
-        student_id: String(roll).trim(), // Supporting your requested exact field
+        student_id: String(roll).trim(), 
         regNo: regNo ? String(regNo).trim() : undefined,
         series: series,
         password_hash,
         role: "student",
         department: "ETE",
-        needs_setup: true, // Forces them to change password on first login
+        needs_setup: true, 
         loginAttempts: 0,
         createdAt: new Date(),
         updatedAt: new Date()
       });
     }
 
-    // --- Insert the Series Data ---
     const newSeries = {
       series,
       currentSemester,
@@ -98,16 +91,13 @@ export async function POST(req: Request) {
 
     await db.collection("series").insertOne(newSeries);
 
-    // --- Bulk Insert the Parsed Students ---
     if (studentsToInsert.length > 0) {
       await db.collection("users").insertMany(studentsToInsert);
     }
 
     await logSystemAction("Series Created", "System", `Series ${series} initialized with ${studentsToInsert.length} students`);
-
     return NextResponse.json({ message: `Series created and ${studentsToInsert.length} students provisioned successfully.` }, { status: 201 });
   } catch (error: any) {
-    console.error("Series Initialization Error:", error);
     return NextResponse.json({ error: error.message || "Failed to create series" }, { status: 500 });
   }
 }
@@ -129,8 +119,6 @@ export async function PATCH(req: Request) {
         const students = await db.collection("users").find({ role: "student", series: seriesDoc.series }).toArray();
         if (students.length > 0) {
           const bulkOps = students.map(student => {
-            
-            // Base update: Reset all active gating flags
             const updateDoc: any = {
               $set: {
                 registrationStatus: "unregistered",
@@ -141,28 +129,23 @@ export async function PATCH(req: Request) {
               }
             };
 
-            // --- DOUBLE ARCHIVE FIX ---
-            // Only push to history if the student has active courses that 
-            // haven't already been safely wiped and archived by the Result Publishing Engine.
+            // --- DOUBLE ARCHIVE FIX & STAGE 1 FREEZE ---
             if (student.registeredCourses && student.registeredCourses.length > 0) {
               updateDoc.$push = {
                 academicHistory: {
                   semester: oldSemester,
-                  courses: student.registeredCourses,
+                  courses: student.registeredCourses, // Raw IDs safely frozen
+                  backlogs: student.registeredBacklogs || [], // Backlogs frozen
                   registrationStatus: student.registrationStatus || "unregistered",
                   formFillupStatus: student.formFillupStatus || "unregistered",
+                  backlogRegStatus: student.backlogRegStatus || "unregistered",
                   archivedAt: new Date(),
-                  note: "Archived via Semester Promotion"
+                  resultStatus: "pending" // Signals results aren't out yet
                 }
               };
             }
 
-            return {
-              updateOne: {
-                filter: { _id: student._id },
-                update: updateDoc
-              }
-            };
+            return { updateOne: { filter: { _id: student._id }, update: updateDoc } };
           });
           
           await db.collection("users").bulkWrite(bulkOps);
@@ -175,14 +158,13 @@ export async function PATCH(req: Request) {
              currentSemester: payload.newSemester, 
              "registration.isOpen": false,
             "formFillup.isOpen": false,
-            "backlogRegistration.isOpen": false, // Also locking backlogs for safety
+            "backlogRegistration.isOpen": false,
             updatedAt: new Date() 
            } 
          }
       );
-
       await logSystemAction("Semester Promoted", "System", `Series ${seriesDoc?.series} advanced from ${oldSemester} to ${payload.newSemester}`);
-      return NextResponse.json({ message: "Semester updated and previous records archived." });
+      return NextResponse.json({ message: "Semester updated and records safely frozen." });
     }
 
     if (action === "graduate") {
@@ -196,7 +178,6 @@ export async function PATCH(req: Request) {
 
     if (action === "assign_advisor") {
       const { slot, advisorEmail, advisorName } = payload;
-      
       const seriesDoc = await db.collection("series").findOne({ _id: new ObjectId(seriesId) });
       const oldEmail = slot === 1 ? seriesDoc?.advisor1?.email : seriesDoc?.advisor2?.email;
 
@@ -205,12 +186,7 @@ export async function PATCH(req: Request) {
 
       await db.collection("series").updateOne(
         { _id: new ObjectId(seriesId) },
-        { $set: { 
-              [updateFieldEmail]: advisorEmail, 
-              [updateFieldName]: advisorName,
-             updatedAt: new Date()
-            } 
-          }
+        { $set: { [updateFieldEmail]: advisorEmail, [updateFieldName]: advisorName, updatedAt: new Date() } }
       );
 
       const syncUserRole = async (emailToSync: string) => {
@@ -219,7 +195,6 @@ export async function PATCH(req: Request) {
         if (!userDoc) return;
 
         const baseRole = userDoc.role === "dept_head" ? "dept_head" : "faculty";
-        
         const advisedSeries = await db.collection("series").find({
           status: "active",
           $or: [{ "advisor1.email": emailToSync }, { "advisor2.email": emailToSync }]

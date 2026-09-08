@@ -45,29 +45,28 @@ export async function POST(req: Request) {
     const client = await clientPromise;
     const db = client.db("academicos");
 
-    // Fetch students who are doing Regular Exams OR Backlog Exams
+    // Fetch students who are doing Regular Exams OR Backlog Exams OR whose data was Frozen
     const students = await db.collection("users").find({
       role: "student",
       series: String(series),
       $or: [
         { formFillupStatus: "approved" },
-        { backlogRegStatus: "approved" }
+        { backlogRegStatus: "approved" },
+        { academicHistory: { $elemMatch: { semester: semester, resultStatus: "pending" } } }
       ]
     }).toArray();
 
     if (students.length === 0) return NextResponse.json({ error: "No cleared students found." }, { status: 400 });
 
-    // Fetch ALL courses (since backlogs can be from previous semesters)
     const courses = await db.collection("courses").find({}).toArray();
     const allMarks = await db.collection("course_marks").find({ series: Number(series) }).toArray();
 
     const compiledResults = [];
 
-    // Process Each Student
     for (const student of students) {
       const roll = student.studentId || student.email.split('@')[0];
       const studentResult: any = {
-        studentId: student._id,
+        studentId: student._id.toString(), // Ensuring robust ObjectId to String cast
         roll,
         name: student.name,
         courseGrades: [],
@@ -77,25 +76,35 @@ export async function POST(req: Request) {
         failedCourses: []
       };
 
+      // --- THE SMART COURSE LOCATOR ---
+      const frozenSemester = student.academicHistory?.find((h: any) => h.semester === semester && h.resultStatus === "pending");
+
+      const rawCourses = frozenSemester ? frozenSemester.courses : (student.registeredCourses || []);
+      const rawBacklogs = frozenSemester ? (frozenSemester.backlogs || []) : (student.registeredBacklogs || []);
+      
+      const isRegApproved = frozenSemester ? (frozenSemester.formFillupStatus === "approved") : (student.formFillupStatus === "approved");
+      const isBacklogApproved = frozenSemester ? (frozenSemester.backlogRegStatus === "approved") : (student.backlogRegStatus === "approved");
+
+      // Extract raw strings natively, accounting for raw ID formats vs rich object formats
+      const targetCourseIds = rawCourses.map((c: any) => typeof c === 'string' ? c : (c.courseCode || c._id?.toString()));
+      const targetBacklogIds = rawBacklogs.map((c: any) => typeof c === 'string' ? c : (c.courseCode || c._id?.toString()));
+
       let totalGradePoints = 0;
       let totalEarnedCredits = 0;
 
-      // SMART ENGINE: Processes a single course, automatically handling Backlog carry-forward
       const processCourse = (courseId: string, isBacklog: boolean) => {
-        const course = courses.find(c => c._id.toString() === courseId);
+        // Bulletproof catalog match by Object ID OR Course Code string
+        const course = courses.find(c => c._id.toString() === courseId || c.courseCode === courseId);
         if (!course) return;
 
-        // Extract ONLY uploads containing this specific student's roll
         const studentUploads = allMarks.filter(m => m.courseCode === course.courseCode && m.marks?.some((sm: any) => sm.roll === roll));
         
-        // Segregate Continuous Assessment from Terminal Exams
         const continuousUploads = studentUploads.filter(u => !u.segment.includes("Final") && !u.segment.includes("Viva") && !u.segment.includes("Defense") && !u.segment.includes("Showcase"));
         const terminalUploads = studentUploads.filter(u => u.segment.includes("Final") || u.segment.includes("Viva") || u.segment.includes("Defense") || u.segment.includes("Showcase"));
 
         let courseTotal = 0;
         let ctMarksCollector: number[] = [];
 
-        // 1. PROCESS CONTINUOUS ASSESSMENTS (Automatically carries forward the old marks for backlogs!)
         const latestContinuous: Record<string, any> = {};
         continuousUploads.forEach(u => {
             const key = `${u.segment}_${u.teacherEmail}`;
@@ -118,15 +127,12 @@ export async function POST(req: Request) {
 
         courseTotal += calculateCTMarks(ctMarksCollector);
 
-        // 2. PROCESS TERMINAL EXAMS (Semester Finals)
         const sortedTerminal = terminalUploads.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
         
         if (isBacklog && sortedTerminal.length > 0) {
-            // BACKLOG INTERCEPTOR: Ignore the old failed terminal exam. 
-            // Establish the new exam period based on the most recent terminal upload.
             const backlogPeriodDate = new Date(sortedTerminal[0].uploadedAt);
             const validTerminalUploads = sortedTerminal.filter(u => 
-                (backlogPeriodDate.getTime() - new Date(u.uploadedAt).getTime()) < (30 * 24 * 60 * 60 * 1000) // Within 30 days
+                (backlogPeriodDate.getTime() - new Date(u.uploadedAt).getTime()) < (30 * 24 * 60 * 60 * 1000) 
             );
             
             const latestTerminal: Record<string, any> = {};
@@ -140,7 +146,6 @@ export async function POST(req: Request) {
             });
 
         } else {
-            // REGULAR PROCESSING
             const latestTerminal: Record<string, any> = {};
             sortedTerminal.forEach(u => {
                 const key = `${u.segment}_${u.teacherEmail}`;
@@ -166,7 +171,6 @@ export async function POST(req: Request) {
           studentResult.backlogGrades.push(resultObj);
         } else {
           studentResult.courseGrades.push(resultObj);
-          // Standard Rule: Failed courses don't penalize the current semester GPA
           if (gradeScale.point > 0) {
             totalEarnedCredits += course.credits;
             totalGradePoints += (course.credits * gradeScale.point);
@@ -177,15 +181,15 @@ export async function POST(req: Request) {
       };
 
       // A. Process Regular Courses
-      if (student.formFillupStatus === "approved") {
-        for (const courseId of (student.registeredCourses || [])) {
+      if (isRegApproved) {
+        for (const courseId of targetCourseIds) {
           processCourse(courseId, false);
         }
       }
 
       // B. Process Backlog Courses
-      if (student.backlogRegStatus === "approved") {
-        for (const courseId of (student.registeredBacklogs || [])) {
+      if (isBacklogApproved) {
+        for (const courseId of targetBacklogIds) {
           processCourse(courseId, true);
         }
       }
@@ -201,11 +205,10 @@ export async function POST(req: Request) {
       let cumulativeCredits = totalEarnedCredits;
 
       (student.academicHistory || []).forEach((hist: any) => {
-        cumulativePoints += (hist.semesterGpa * hist.earnedCredits); // Recover total grade points for that semester
+        cumulativePoints += (hist.semesterGpa * hist.earnedCredits); 
         cumulativeCredits += hist.earnedCredits;
       });
 
-      // Integrate newly passed backlogs into the global CGPA
       studentResult.backlogGrades.forEach((bg: any) => {
         if (bg.gradePoint > 0) {
           cumulativePoints += (bg.credits * bg.gradePoint);
@@ -224,7 +227,7 @@ export async function POST(req: Request) {
       semester,
       compiledBy: session.user.email,
       compiledAt: new Date(),
-      status: "draft",
+      status: "draft", // TABULATION LOCKOUT INITIATED
       results: compiledResults
     };
 
@@ -276,6 +279,13 @@ export async function PATCH(req: Request) {
       );
       return NextResponse.json({ message: "Draft successfully sent to the Department Head." });
     }
+
+    if (action === "unlock_draft") {
+      // Allows Advisor to lift the Tabulation Lockout state
+      await db.collection("draft_results").deleteOne({ series: Number(series), semester });
+      return NextResponse.json({ message: "Draft deleted. Faculty uploads unlocked." });
+    }
+
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (error) {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
