@@ -17,9 +17,11 @@ export async function POST(req: NextRequest) {
     const courseCode = formData.get("courseCode") as string;
     const series = formData.get("series") as string;
     
-    // Safely extract and trim
     const rawSegment = formData.get("segment") as string;
     const segment = rawSegment ? rawSegment.trim() : "";
+    
+    // --- NEW: Intercept Backlog Flag ---
+    const isBacklog = formData.get("isBacklog") === "true";
 
     if (!file || !courseCode || !series || !segment) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -39,7 +41,7 @@ export async function POST(req: NextRequest) {
 
     for (const row of data as any[]) {
       const roll = row["Roll Number"]?.toString().trim();
-      if (!roll || roll === "No approved students") continue;
+      if (!roll || roll === "No approved students" || roll === "No approved backlog students") continue;
 
       let markData: any = { roll };
 
@@ -67,9 +69,8 @@ export async function POST(req: NextRequest) {
             markData.raw = { total, attended, percentage }; 
         }
       } 
-      // ALGORITHM 2: Dynamic CT Formatting (Bulletproof Check)
+      // ALGORITHM 2: Dynamic CT Formatting
       else if (segment.includes("Class Tests")) {
-        // Dynamically assign CT marks if the column exists in the Excel sheet
         if (row["CT-1"] !== undefined) markData.ct1 = Number(row["CT-1"]) || 0;
         if (row["CT-2"] !== undefined) markData.ct2 = Number(row["CT-2"]) || 0;
         if (row["CT-3"] !== undefined) markData.ct3 = Number(row["CT-3"]) || 0;
@@ -85,8 +86,8 @@ export async function POST(req: NextRequest) {
 
     const client = await clientPromise;
     const db = client.db("academicos");
-// --- TABULATION LOCKOUT ENFORCEMENT ---
-    // Look up the semester for this course slot
+
+    // --- TABULATION LOCKOUT ENFORCEMENT ---
     const slot = await db.collection("routine_slots").findOne({ series: Number(series), courseCode });
     if (slot) {
        const draft = await db.collection("draft_results").findOne({ series: Number(series), semester: slot.semester });
@@ -96,27 +97,32 @@ export async function POST(req: NextRequest) {
            }, { status: 403 });
        }
     }
+
+    // Save the marks to the master marks collection
     await db.collection("course_marks").updateOne(
-      { 
-        courseCode, 
-        series: Number(series), 
-        segment, 
-        teacherEmail: session.user.email 
-      },
+      { courseCode, series: Number(series), segment, teacherEmail: session.user.email },
       { 
         $set: {
           marks: processedMarks,
           uploadedAt: new Date(),
-          teacherName: session.user.name
+          teacherName: session.user.name,
+          isBacklog // Mark this specific upload block as a backlog submission
         } 
       },
       { upsert: true }
     );
 
+    // --- NEW: Update the correct completion array for the UI checkmarks ---
+    const updateField = isBacklog ? "completedBacklogSegments" : "completedSegments";
+    await db.collection("routine_slots").updateOne(
+       { series: Number(series), courseCode },
+       { $addToSet: { [updateField]: segment } }
+    );
+
     await logSystemAction(
       "Marks Uploaded", 
       "Audit", 
-      `${session.user.name} uploaded ${segment} marks for ${courseCode} (Series ${series})`
+      `${session.user.name} uploaded ${isBacklog ? 'BACKLOG ' : ''}${segment} marks for ${courseCode} (Series ${series})`
     );
 
     return NextResponse.json({ message: "Marks successfully processed and saved." });

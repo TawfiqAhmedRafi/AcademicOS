@@ -15,9 +15,12 @@ export async function GET(req: NextRequest) {
     const courseCode = searchParams.get("courseCode");
     const series = searchParams.get("series");
     
-    // FIX: Safely extract and trim the segment to guarantee exact string matching
+    // Safely extract and trim the segment to guarantee exact string matching
     const rawSegment = searchParams.get("segment") || "";
     const segment = rawSegment.trim();
+    
+    // --- NEW: Intercept Backlog Flag ---
+    const isBacklog = searchParams.get("isBacklog") === "true";
 
     if (!courseCode || !series || !segment) {
       return new NextResponse("Missing parameters", { status: 400 });
@@ -32,28 +35,38 @@ export async function GET(req: NextRequest) {
     }
     const courseIdStr = course._id.toString();
 
-    const students = await db.collection("users").find({
-      role: "student",
-      series: String(series),
-      registrationStatus: "approved"
-    }).toArray();
+    // --- DYNAMIC ROSTER QUERY ---
+    let query: any = { role: "student", series: String(series) };
+    if (isBacklog) {
+      query.backlogRegStatus = "approved"; // Only students approved for backlog exams
+    } else {
+      query.registrationStatus = "approved"; // Regular semester students
+    }
 
-    const enrolledStudents = students.filter(s => 
-      s.registeredCourses && s.registeredCourses.includes(courseIdStr)
-    );
+    const students = await db.collection("users").find(query).toArray();
+
+    // Filter down to the exact course
+    const enrolledStudents = students.filter(s => {
+      if (isBacklog) {
+        // Backlog IDs can be stored as either string codes or ObjectIds
+        return s.registeredBacklogs && (s.registeredBacklogs.includes(courseIdStr) || s.registeredBacklogs.includes(courseCode));
+      } else {
+        return s.registeredCourses && (s.registeredCourses.includes(courseIdStr) || s.registeredCourses.includes(courseCode));
+      }
+    });
 
     const rolls = enrolledStudents
       .map(s => s.studentId || s.email.split('@')[0])
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
-    // FIX: Bulletproof header mapping for CTs
+    // Bulletproof header mapping for CTs
     let headers: string[] = [];
     if (segment === "Attendance") {
       headers = ["Roll Number", "Total Classes", "Attended Classes"];
     } else if (segment === "Class Tests (4)") {
-      headers = ["Roll Number", "CT-1", "CT-2", "CT-3", "CT-4"]; // 4 columns for single teacher
+      headers = ["Roll Number", "CT-1", "CT-2", "CT-3", "CT-4"]; 
     } else if (segment === "Class Tests (2)") {
-      headers = ["Roll Number", "CT-1", "CT-2"]; // 2 columns for multi-teacher
+      headers = ["Roll Number", "CT-1", "CT-2"]; 
     } else {
       headers = ["Roll Number", "Marks"];
     }
@@ -65,9 +78,9 @@ export async function GET(req: NextRequest) {
     });
 
     if (excelData.length === 0) {
-       const dummyRow: any = { "Roll Number": "No approved students" };
-       headers.slice(1).forEach(h => dummyRow[h] = "");
-       excelData.push(dummyRow);
+      const dummyRow: any = { "Roll Number": isBacklog ? "No approved backlog students" : "No approved students" };
+      headers.slice(1).forEach(h => dummyRow[h] = "");
+      excelData.push(dummyRow);
     }
 
     const worksheet = XLSX.utils.json_to_sheet(excelData, { header: headers });
@@ -81,7 +94,7 @@ export async function GET(req: NextRequest) {
     const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
     const sanitizedSegment = segment.replace(/[^a-zA-Z0-9]/g, "_");
-    const filename = `${courseCode.replace(/\s+/g, "_")}_${series}_${sanitizedSegment}.xlsx`;
+    const filename = `${courseCode.replace(/\s+/g, "_")}_${series}_${isBacklog ? 'BACKLOG_' : ''}${sanitizedSegment}.xlsx`;
 
     return new NextResponse(buffer, {
       status: 200,

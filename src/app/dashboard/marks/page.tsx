@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Loader2, Download, Upload, CheckCircle2, EyeOff, FileSpreadsheet, AlertCircle, Check, Filter, Lock } from "lucide-react";
+import { Loader2, Download, Upload, CheckCircle2, EyeOff, FileSpreadsheet, AlertCircle, Check, Filter, Lock, BookOpen, ShieldAlert } from "lucide-react";
 import { useToast } from "@/app/components/ToastProvider";
 import DropdownFilter from "@/app/components/DropdownFilter";
 
@@ -15,11 +15,18 @@ type MarkCourse = {
   teacherCount: number;
   completedSegments: string[];
   isXXPending: boolean;
-  isLocked: boolean; // <-- ENFORCED
+  isLocked: boolean;
+  isBacklog?: boolean;
+  studentCount?: number;
 };
 
-// Dynamic Segments based on Teacher Count & Course Code
 const getSegments = (course: MarkCourse) => {
+  // BACKLOG MODE: Only one terminal exam upload required
+  if (course.isBacklog) {
+      return ["Semester Final (Backlog)"]; 
+  }
+
+  // REGULAR MODE
   if (course.type === 'theory') {
     if (course.teacherCount > 1) return ["Class Tests (2)", "Assignment", "Attendance", "Semester Final (Part)"];
     return ["Class Tests (4)", "Assignment", "Attendance", "Semester Final (Full)"];
@@ -27,20 +34,13 @@ const getSegments = (course: MarkCourse) => {
   
   if (course.type === 'special') {
     const code = course.courseCode;
-    // 2nd & 3rd Year Projects
     if (code.includes("2200") || code.includes("3200")) return ["Supervisor", "Showcase", "Board Viva"];
-    // 3rd Year Seminar
     if (code.includes("3218")) return ["Supervisor", "Seminar 1", "Seminar 2"];
-    // 4th Year Thesis Part 1
     if (code.includes("4100")) return ["Supervisor", "Pre Defense", "Board Viva"];
-    // 4th Year Thesis Part 2
     if (code.includes("4200")) return ["Supervisor", "Defense", "Board Viva"];
-    
-    // Fallback
     return ["Supervisor Marks", "Board Viva", "Defense"]; 
   }
   
-  // Standard Sessional/Lab
   return ["Attendance", "Quiz", "Lab Report", "Performance", "Lab Viva", "Lab Final", "Board Viva"];
 };
 
@@ -48,13 +48,12 @@ export default function FacultyMarksDashboard() {
   const [courses, setCourses] = useState<MarkCourse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'regular' | 'backlog'>('regular');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadTarget, setUploadTarget] = useState<{ courseCode: string, series: number, segment: string } | null>(null);
+  const [uploadTarget, setUploadTarget] = useState<{ courseCode: string, series: number, segment: string, isBacklog: boolean } | null>(null);
   
   const { showToast } = useToast();
-
-  // --- Filter State & Dynamic Options ---
   const [seriesFilter, setSeriesFilter] = useState("All");
 
   const uniqueSeries = Array.from(new Set(courses.map(c => c.series))).sort((a, b) => a - b);
@@ -64,7 +63,9 @@ export default function FacultyMarksDashboard() {
   ];
 
   const filteredCourses = courses.filter(c => seriesFilter === "All" || String(c.series) === seriesFilter);
-  // ------------------------------------------
+  const displayCourses = activeTab === 'regular' ? filteredCourses.filter(c => !c.isBacklog) : filteredCourses.filter(c => c.isBacklog);
+  
+  const backlogCount = courses.filter(c => c.isBacklog).length;
 
   const fetchCourses = async (showSpinner = true) => {
     if (showSpinner) setIsLoading(true);
@@ -99,21 +100,25 @@ export default function FacultyMarksDashboard() {
     });
     if (res.ok) {
       showToast("Course code locked in!", "success");
-      fetchCourses(false); // Silent refresh to load correct name and un-dim the card
+      fetchCourses(false); 
+    } else {
+        const data = await res.json();
+        showToast(data.error || "Failed to validate code.", "error");
     }
   };
 
-  const handleDownloadDemo = async (courseCode: string, series: number, segment: string) => {
-    showToast(`Generating template for ${courseCode}...`, "info");
+  const handleDownloadDemo = async (course: MarkCourse, segment: string) => {
+    showToast(`Generating template for ${course.courseCode}...`, "info");
     try {
-      const res = await fetch(`/api/faculty/template?courseCode=${encodeURIComponent(courseCode)}&series=${series}&segment=${encodeURIComponent(segment)}`);
+      // Pass the isBacklog flag to ensure the backend filters the Excel rows!
+      const res = await fetch(`/api/faculty/template?courseCode=${encodeURIComponent(course.courseCode)}&series=${course.series}&segment=${encodeURIComponent(segment)}&isBacklog=${course.isBacklog ? 'true' : 'false'}`);
       if (!res.ok) throw new Error(await res.text() || "Failed to generate template");
       
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${courseCode.replace(/\s+/g, "_")}_${series}_${segment.replace(/[^a-zA-Z0-9]/g, "_")}.xlsx`;
+      a.download = `${course.courseCode.replace(/\s+/g, "_")}_${course.series}_${segment.replace(/[^a-zA-Z0-9]/g, "_")}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -123,8 +128,8 @@ export default function FacultyMarksDashboard() {
     }
   };
 
-  const triggerUploadClick = (courseCode: string, series: number, segment: string) => {
-    setUploadTarget({ courseCode, series, segment });
+  const triggerUploadClick = (course: MarkCourse, segment: string) => {
+    setUploadTarget({ courseCode: course.courseCode, series: course.series, segment, isBacklog: !!course.isBacklog });
     if (fileInputRef.current) fileInputRef.current.click();
   };
 
@@ -140,17 +145,15 @@ export default function FacultyMarksDashboard() {
     formData.append("courseCode", uploadTarget.courseCode);
     formData.append("series", String(uploadTarget.series));
     formData.append("segment", uploadTarget.segment);
+    formData.append("isBacklog", String(uploadTarget.isBacklog));
 
     try {
-       const res = await fetch("/api/faculty/upload-marks", {
-          method: "POST",
-          body: formData,
-       });
+       const res = await fetch("/api/faculty/upload-marks", { method: "POST", body: formData });
        const data = await res.json();
        if (!res.ok) throw new Error(data.error || "Upload failed");
        
        showToast(data.message, "success");
-       fetchCourses(false); // SILENT refresh to update checkmarks without screen flash
+       fetchCourses(false); 
     } catch (err: any) {
        showToast(err.message, "error");
     } finally {
@@ -165,7 +168,6 @@ export default function FacultyMarksDashboard() {
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       
-      {/* Header with Flexbox for the Dropdown */}
       <div className="mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white">Marks Upload Portal</h1>
@@ -182,15 +184,32 @@ export default function FacultyMarksDashboard() {
         )}
       </div>
 
-      {courses.length === 0 ? (
+      {/* Tabs */}
+      <div className="flex gap-4 border-b border-slate-200 dark:border-white/10 mb-8">
+        <button 
+          onClick={() => setActiveTab('regular')}
+          className={`pb-4 px-2 text-sm font-bold flex items-center gap-2 transition-colors border-b-2 ${activeTab === 'regular' ? 'border-ruet-blue text-ruet-blue dark:border-ruet-gold dark:text-ruet-gold' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
+        >
+          <BookOpen size={16} /> Regular Schedule
+        </button>
+        <button 
+          onClick={() => setActiveTab('backlog')}
+          className={`pb-4 px-2 text-sm font-bold flex items-center gap-2 transition-colors border-b-2 ${activeTab === 'backlog' ? 'border-ruet-blue text-ruet-blue dark:border-ruet-gold dark:text-ruet-gold' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
+        >
+          <ShieldAlert size={16} /> Backlog Exams
+          {backlogCount > 0 && <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-[10px] dark:bg-amber-500/20 dark:text-amber-400">{backlogCount}</span>}
+        </button>
+      </div>
+
+      {displayCourses.length === 0 ? (
         <div className="glass-panel py-24 text-center rounded-3xl flex flex-col items-center">
           <CheckCircle2 size={48} className="text-emerald-500 mb-4 opacity-50" />
           <h2 className="text-xl font-bold text-slate-900 dark:text-white">All Caught Up!</h2>
-          <p className="text-slate-500 mt-2">You have no active courses requiring marks upload.</p>
+          <p className="text-slate-500 mt-2">You have no pending assignments in this category.</p>
         </div>
       ) : (
         <div className="space-y-8">
-          {[...filteredCourses]
+          {[...displayCourses]
             .sort((a, b) => {
               if (a.series !== b.series) return a.series - b.series;
               return a.courseCode.localeCompare(b.courseCode);
@@ -200,33 +219,38 @@ export default function FacultyMarksDashboard() {
 
             return (
               <div key={course.uniqueId} className="glass-panel rounded-3xl overflow-hidden border border-slate-200 dark:border-white/10 shadow-lg">
-                <div className={`px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-white/10 ${course.isSpecial ? 'bg-purple-50/50 dark:bg-purple-500/5' : course.type === 'theory' ? 'bg-blue-50/50 dark:bg-blue-500/5' : 'bg-emerald-50/50 dark:bg-emerald-500/5'}`}>
+                <div className={`px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-white/10 ${course.isBacklog ? 'bg-amber-50/50 dark:bg-amber-500/5' : course.isSpecial ? 'bg-purple-50/50 dark:bg-purple-500/5' : course.type === 'theory' ? 'bg-blue-50/50 dark:bg-blue-500/5' : 'bg-emerald-50/50 dark:bg-emerald-500/5'}`}>
                   <div>
                     <div className="flex items-center gap-3 mb-1">
                       
-                      {/* Input Box for XX Resolution */}
                       {course.isXXPending ? (
                         <input 
                           type="text" 
                           placeholder="Type Exact Code (e.g. ETE 3212)" 
                           className="px-2 py-1 text-sm font-bold border border-amber-300 rounded focus:outline-none focus:border-amber-500 bg-amber-50 dark:bg-amber-900/30 text-amber-900 dark:text-amber-100 placeholder:font-normal"
                           onBlur={(e) => handleResolveXX(course.uniqueId, e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleResolveXX(course.uniqueId, e.currentTarget.value);
-                          }}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleResolveXX(course.uniqueId, e.currentTarget.value); }}
                         />
                       ) : (
                         <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{course.courseCode}</h2>
                       )}
 
                       <span className="bg-slate-900 text-white dark:bg-white dark:text-black px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest">Series {course.series}</span>
-                      <span className="bg-slate-200 text-slate-700 dark:bg-white/20 dark:text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase">{course.type}</span>
-                      {course.type === "theory" && <span className="bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase">{course.teacherCount > 1 ? "Multi-Teacher" : "Single Teacher"}</span>}
-                      {course.isSpecial && <span className="bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Broadcast</span>}
+                      
+                      {course.isBacklog ? (
+                         <span className="bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                            <Users size={10}/> {course.studentCount} Scripts
+                         </span>
+                      ) : (
+                         <span className="bg-slate-200 text-slate-700 dark:bg-white/20 dark:text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase">{course.type}</span>
+                      )}
+
                     </div>
                     <p className="text-sm font-medium text-slate-600 dark:text-slate-400 line-clamp-1">{course.title}</p>
                   </div>
-                  <button onClick={() => handleHideCourse(course.uniqueId)} className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"><EyeOff size={14} /> Remove</button>
+                  {!course.isBacklog && (
+                     <button onClick={() => handleHideCourse(course.uniqueId)} className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"><EyeOff size={14} /> Remove</button>
+                  )}
                 </div>
 
                 {course.isXXPending && (
@@ -236,7 +260,6 @@ export default function FacultyMarksDashboard() {
                   </div>
                 )}
                 
-                {/* --- NEW: TABULATION LOCKOUT BANNER --- */}
                 {course.isLocked && (
                   <div className="bg-red-50 dark:bg-red-500/10 p-3 flex items-center gap-2 border-b border-red-100 dark:border-red-500/20">
                     <Lock size={16} className="text-red-600 dark:text-red-400" />
@@ -253,20 +276,18 @@ export default function FacultyMarksDashboard() {
                         <div className="mb-4 flex justify-between items-start">
                           <div>
                             <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm mb-1">{segment}</h4>
-                            {segment === "Attendance" && <p className="text-[10px] text-slate-500">Template requires Total & Attended.</p>}
-                            {segment.includes("Class Tests") && <p className="text-[10px] text-slate-500">Template adapts to teacher count.</p>}
+                            {segment === "Attendance" && !course.isBacklog && <p className="text-[10px] text-slate-500">Template requires Total & Attended.</p>}
                           </div>
                           {isCompleted && <CheckCircle2 size={18} className="text-emerald-500 flex-shrink-0" />}
                         </div>
                         
                         <div className="flex flex-col gap-2 mt-auto">
-                          <button onClick={() => handleDownloadDemo(course.courseCode, course.series, segment)} className="w-full flex items-center justify-center gap-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 py-2 rounded-xl text-xs font-bold transition-colors">
-                            <FileSpreadsheet size={14} className="text-emerald-600 dark:text-emerald-400" /> Template
+                          <button onClick={() => handleDownloadDemo(course, segment)} className="w-full flex items-center justify-center gap-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 py-2 rounded-xl text-xs font-bold transition-colors">
+                            <FileSpreadsheet size={14} className={course.isBacklog ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"} /> Template
                           </button>
                           
-                          {/* --- ENFORCING LOCKOUT ON BUTTON --- */}
                           <button 
-                            onClick={() => triggerUploadClick(course.courseCode, course.series, segment)}
+                            onClick={() => triggerUploadClick(course, segment)}
                             disabled={isUploading || course.isLocked}
                             className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-colors shadow-sm disabled:opacity-50 ${course.isLocked ? 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed' : isCompleted ? 'bg-slate-800 text-white hover:bg-slate-700 dark:bg-white dark:text-black dark:hover:bg-slate-200' : 'bg-ruet-blue text-white hover:bg-blue-900 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400'}`}
                           >
