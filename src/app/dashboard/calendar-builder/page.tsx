@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, CalendarDays, Plus, Trash2, Save, Send, AlertCircle } from "lucide-react";
+import { Loader2, CalendarDays, Plus, Trash2, Save, Send, AlertCircle, Download, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/app/components/ToastProvider";
 import Swal from "sweetalert2";
 
@@ -9,10 +9,22 @@ type ScheduleEvent = { id: string; description: string; from: string; to: string
 type CtSchedule = { courseCode: string; ct1: string; ct2: string; ct3: string; ct4: string };
 type FinalSchedule = { exam: string; date: string };
 
+const DEFAULT_EVENTS: ScheduleEvent[] = [
+  { id: "def_1", description: "Class", from: "", to: "", duration: "" },
+  { id: "def_2", description: "Course registration deadline", from: "", to: "", duration: "" },
+  { id: "def_3", description: "Course Registration with late fee", from: "", to: "", duration: "" },
+  { id: "def_4", description: "Mid semester", from: "", to: "", duration: "" },
+  { id: "def_5", description: "Class", from: "", to: "", duration: "" },
+  { id: "def_6", description: "Probable date for board viva", from: "", to: "", duration: "" },
+  { id: "def_7", description: "Last class in this semester", from: "", to: "", duration: "" },
+  { id: "def_8", description: "Semester final examination", from: "", to: "", duration: "" }
+];
+
 export default function CalendarBuilderPage() {
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false); // <-- NEW
   const { showToast } = useToast();
 
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
@@ -29,11 +41,11 @@ export default function CalendarBuilderPage() {
       setData(json);
       
       if (json.calendar) {
-        setEvents(json.calendar.scheduleEvents || []);
+        setEvents(json.calendar.scheduleEvents?.length > 0 ? json.calendar.scheduleEvents : [...DEFAULT_EVENTS]);
         setCtSchedule(json.calendar.ctSchedule || []);
         if (json.calendar.finalSchedule?.length) setFinalSchedule(json.calendar.finalSchedule);
       } else {
-        // Pre-fill CT schedule with theory courses
+        setEvents([...DEFAULT_EVENTS]);
         setCtSchedule(json.defaultCtCourses.map((code: string) => ({
           courseCode: code, ct1: "", ct2: "", ct3: "", ct4: ""
         })));
@@ -44,36 +56,18 @@ export default function CalendarBuilderPage() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // --- DYNAMIC AUTO-SORTING LOGIC ---
   const sortedEvents = [...events].sort((a, b) => {
+    if (!a.from && !b.from) return 0;
     if (!a.from) return 1;
     if (!b.from) return -1;
     return new Date(a.from).getTime() - new Date(b.from).getTime();
   });
 
-  const handleAddEvent = () => {
-    setEvents([...events, { id: Date.now().toString(), description: "", from: "", to: "", duration: "" }]);
-  };
-
-  const handleUpdateEvent = (id: string, field: keyof ScheduleEvent, value: string) => {
-    setEvents(events.map(e => e.id === id ? { ...e, [field]: value } : e));
-  };
-
-  const handleRemoveEvent = (id: string) => {
-    setEvents(events.filter(e => e.id !== id));
-  };
-
-  const handleUpdateCt = (index: number, field: keyof CtSchedule, value: string) => {
-    const updated = [...ctSchedule];
-    updated[index][field] = value;
-    setCtSchedule(updated);
-  };
-
-  const handleUpdateFinal = (index: number, value: string) => {
-    const updated = [...finalSchedule];
-    updated[index].date = value;
-    setFinalSchedule(updated);
-  };
+  const handleAddEvent = () => setEvents([...events, { id: Date.now().toString(), description: "", from: "", to: "", duration: "" }]);
+  const handleUpdateEvent = (id: string, field: keyof ScheduleEvent, value: string) => setEvents(events.map(e => e.id === id ? { ...e, [field]: value } : e));
+  const handleRemoveEvent = (id: string) => setEvents(events.filter(e => e.id !== id));
+  const handleUpdateCt = (index: number, field: keyof CtSchedule, value: string) => { const updated = [...ctSchedule]; updated[index][field] = value; setCtSchedule(updated); };
+  const handleUpdateFinal = (index: number, value: string) => { const updated = [...finalSchedule]; updated[index].date = value; setFinalSchedule(updated); };
 
   const handleSave = async (isPublish: boolean) => {
     if (isPublish) {
@@ -111,7 +105,31 @@ export default function CalendarBuilderPage() {
     setIsSaving(false);
   };
 
+  // --- NEW: Download Handler ---
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    showToast("Generating PDF...", "info");
+    try {
+      const res = await fetch("/api/advisor/calendar/pdf");
+      if (!res.ok) throw new Error("Failed to generate PDF");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Academic_Calendar_Series_${data.series}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      showToast("Download failed.", "error");
+    }
+    setIsDownloading(false);
+  };
+
   if (isLoading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="animate-spin text-ruet-blue dark:text-ruet-gold" size={32} /></div>;
+
+  const isPublished = data?.calendar?.status === "published";
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20 max-w-6xl mx-auto">
@@ -120,21 +138,35 @@ export default function CalendarBuilderPage() {
           <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white flex items-center gap-3">
             <CalendarDays className="text-ruet-blue dark:text-ruet-gold" size={32} /> Academic Calendar Builder
           </h1>
-          <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-            Series {data.series} | Semester {data.semester}
-          </p>
+          <div className="mt-2 flex items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
+            <span>Series {data.series} | Semester {data.semester}</span>
+            {isPublished && (
+              <span className="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                <CheckCircle2 size={12}/> Live / Published
+              </span>
+            )}
+          </div>
         </div>
+        
+        {/* --- NEW: Dynamic Workflow Buttons --- */}
         <div className="flex gap-3">
-          <button onClick={() => handleSave(false)} disabled={isSaving} className="px-6 py-2.5 rounded-xl font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/20 transition-colors flex items-center gap-2">
-            <Save size={16} /> Save Draft
+          <button onClick={() => handleSave(false)} disabled={isSaving} className="px-6 py-2.5 rounded-xl font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/20 transition-colors flex items-center gap-2 shadow-sm">
+            <Save size={16} /> {isPublished ? "Revert to Draft" : "Save Draft"}
           </button>
-          <button onClick={() => handleSave(true)} disabled={isSaving} className="px-6 py-2.5 rounded-xl font-bold bg-ruet-blue text-white hover:bg-blue-900 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400 shadow-lg transition-colors flex items-center gap-2">
-            {isSaving ? <Loader2 className="animate-spin" size={16}/> : <Send size={16} />} Publish
-          </button>
+          
+          {isPublished ? (
+            <button onClick={handleDownload} disabled={isDownloading} className="px-6 py-2.5 rounded-xl font-bold bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-black dark:hover:bg-slate-200 shadow-lg transition-colors flex items-center gap-2">
+              {isDownloading ? <Loader2 className="animate-spin" size={16}/> : <Download size={16} />} Download PDF
+            </button>
+          ) : (
+            <button onClick={() => handleSave(true)} disabled={isSaving} className="px-6 py-2.5 rounded-xl font-bold bg-ruet-blue text-white hover:bg-blue-900 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400 shadow-lg transition-colors flex items-center gap-2">
+              {isSaving ? <Loader2 className="animate-spin" size={16}/> : <Send size={16} />} Publish
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="space-y-8">
+      <div className={`space-y-8 transition-opacity ${isPublished ? 'opacity-80' : ''}`}>
         
         {/* SECTION 1: DYNAMIC EVENTS */}
         <div className="glass-panel rounded-3xl p-6 md:p-8">
@@ -147,7 +179,7 @@ export default function CalendarBuilderPage() {
           
           <div className="bg-amber-50 dark:bg-amber-500/10 p-3 rounded-xl mb-4 flex items-start gap-2 border border-amber-200 dark:border-amber-500/20">
             <AlertCircle className="text-amber-600 dark:text-amber-400 shrink-0" size={18} />
-            <p className="text-xs text-amber-800 dark:text-amber-200">Rows will automatically sort themselves chronologically based on the "From" date before saving.</p>
+            <p className="text-xs text-amber-800 dark:text-amber-200">Standard events are pre-filled. Add vacation rows and input dates; the table will automatically sort chronologically before saving.</p>
           </div>
 
           <div className="overflow-x-auto">
@@ -165,25 +197,22 @@ export default function CalendarBuilderPage() {
                 {sortedEvents.map(event => (
                   <tr key={event.id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors">
                     <td className="p-2">
-                      <input type="text" value={event.description} onChange={(e) => handleUpdateEvent(event.id, "description", e.target.value)} placeholder="e.g. Durga Puja Vacation" className="w-full bg-transparent border border-slate-300 dark:border-white/20 rounded-lg px-3 py-1.5 focus:border-ruet-blue dark:focus:border-ruet-gold outline-none" />
+                      <input type="text" value={event.description} onChange={(e) => handleUpdateEvent(event.id, "description", e.target.value)} placeholder="e.g. Durga Puja Vacation" className="w-full bg-transparent border border-slate-300 dark:border-white/20 rounded-lg px-3 py-1.5 focus:border-ruet-blue dark:focus:border-ruet-gold outline-none font-medium text-slate-900 dark:text-white" />
                     </td>
                     <td className="p-2">
-                      <input type="date" value={event.from} onChange={(e) => handleUpdateEvent(event.id, "from", e.target.value)} className="w-full bg-transparent border border-slate-300 dark:border-white/20 rounded-lg px-3 py-1.5 focus:border-ruet-blue dark:focus:border-ruet-gold outline-none" />
+                      <input type="date" value={event.from} onChange={(e) => handleUpdateEvent(event.id, "from", e.target.value)} className="w-full bg-transparent border border-slate-300 dark:border-white/20 rounded-lg px-3 py-1.5 focus:border-ruet-blue dark:focus:border-ruet-gold outline-none text-slate-700 dark:text-slate-300" />
                     </td>
                     <td className="p-2">
-                      <input type="date" value={event.to} onChange={(e) => handleUpdateEvent(event.id, "to", e.target.value)} className="w-full bg-transparent border border-slate-300 dark:border-white/20 rounded-lg px-3 py-1.5 focus:border-ruet-blue dark:focus:border-ruet-gold outline-none" />
+                      <input type="date" value={event.to} onChange={(e) => handleUpdateEvent(event.id, "to", e.target.value)} className="w-full bg-transparent border border-slate-300 dark:border-white/20 rounded-lg px-3 py-1.5 focus:border-ruet-blue dark:focus:border-ruet-gold outline-none text-slate-700 dark:text-slate-300" />
                     </td>
                     <td className="p-2">
-                      <input type="text" value={event.duration} onChange={(e) => handleUpdateEvent(event.id, "duration", e.target.value)} placeholder="e.g. 1 Week" className="w-full bg-transparent border border-slate-300 dark:border-white/20 rounded-lg px-3 py-1.5 focus:border-ruet-blue dark:focus:border-ruet-gold outline-none" />
+                      <input type="text" value={event.duration} onChange={(e) => handleUpdateEvent(event.id, "duration", e.target.value)} placeholder="e.g. 1 Week" className="w-full bg-transparent border border-slate-300 dark:border-white/20 rounded-lg px-3 py-1.5 focus:border-ruet-blue dark:focus:border-ruet-gold outline-none text-slate-700 dark:text-slate-300" />
                     </td>
                     <td className="p-2 text-center">
-                      <button onClick={() => handleRemoveEvent(event.id)} className="text-red-400 hover:text-red-600 transition-colors p-1"><Trash2 size={16} /></button>
+                      <button onClick={() => handleRemoveEvent(event.id)} className="text-slate-400 hover:text-red-500 transition-colors p-1"><Trash2 size={16} /></button>
                     </td>
                   </tr>
                 ))}
-                {sortedEvents.length === 0 && (
-                  <tr><td colSpan={5} className="py-8 text-center text-slate-400 italic">No events added. Click "Add Event Row".</td></tr>
-                )}
               </tbody>
             </table>
           </div>
@@ -210,10 +239,10 @@ export default function CalendarBuilderPage() {
                       <td className="p-3 font-bold text-slate-900 dark:text-white max-w-[120px] truncate" title={ct.courseCode}>
                         <input type="text" value={ct.courseCode} onChange={(e) => handleUpdateCt(idx, "courseCode", e.target.value)} className="w-full bg-transparent border-b border-dashed border-slate-300 dark:border-slate-600 focus:border-ruet-blue outline-none py-1" />
                       </td>
-                      <td className="p-2"><input type="date" value={ct.ct1} onChange={(e) => handleUpdateCt(idx, "ct1", e.target.value)} className="w-full bg-transparent border border-slate-300 dark:border-white/20 rounded-lg px-2 py-1 focus:border-ruet-blue outline-none text-xs" /></td>
-                      <td className="p-2"><input type="date" value={ct.ct2} onChange={(e) => handleUpdateCt(idx, "ct2", e.target.value)} className="w-full bg-transparent border border-slate-300 dark:border-white/20 rounded-lg px-2 py-1 focus:border-ruet-blue outline-none text-xs" /></td>
-                      <td className="p-2"><input type="date" value={ct.ct3} onChange={(e) => handleUpdateCt(idx, "ct3", e.target.value)} className="w-full bg-transparent border border-slate-300 dark:border-white/20 rounded-lg px-2 py-1 focus:border-ruet-blue outline-none text-xs" /></td>
-                      <td className="p-2"><input type="date" value={ct.ct4} onChange={(e) => handleUpdateCt(idx, "ct4", e.target.value)} className="w-full bg-transparent border border-slate-300 dark:border-white/20 rounded-lg px-2 py-1 focus:border-ruet-blue outline-none text-xs" /></td>
+                      <td className="p-2"><input type="date" value={ct.ct1} onChange={(e) => handleUpdateCt(idx, "ct1", e.target.value)} className="w-full bg-transparent border border-slate-300 dark:border-white/20 rounded-lg px-2 py-1 focus:border-ruet-blue outline-none text-xs text-slate-700 dark:text-slate-300" /></td>
+                      <td className="p-2"><input type="date" value={ct.ct2} onChange={(e) => handleUpdateCt(idx, "ct2", e.target.value)} className="w-full bg-transparent border border-slate-300 dark:border-white/20 rounded-lg px-2 py-1 focus:border-ruet-blue outline-none text-xs text-slate-700 dark:text-slate-300" /></td>
+                      <td className="p-2"><input type="date" value={ct.ct3} onChange={(e) => handleUpdateCt(idx, "ct3", e.target.value)} className="w-full bg-transparent border border-slate-300 dark:border-white/20 rounded-lg px-2 py-1 focus:border-ruet-blue outline-none text-xs text-slate-700 dark:text-slate-300" /></td>
+                      <td className="p-2"><input type="date" value={ct.ct4} onChange={(e) => handleUpdateCt(idx, "ct4", e.target.value)} className="w-full bg-transparent border border-slate-300 dark:border-white/20 rounded-lg px-2 py-1 focus:border-ruet-blue outline-none text-xs text-slate-700 dark:text-slate-300" /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -236,7 +265,7 @@ export default function CalendarBuilderPage() {
                   <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-white/5">
                     <td className="p-3 font-bold text-slate-900 dark:text-white text-center">{fs.exam}</td>
                     <td className="p-2">
-                      <input type="date" value={fs.date} onChange={(e) => handleUpdateFinal(idx, e.target.value)} className="w-full bg-transparent border border-slate-300 dark:border-white/20 rounded-lg px-3 py-1.5 focus:border-ruet-blue dark:focus:border-ruet-gold outline-none" />
+                      <input type="date" value={fs.date} onChange={(e) => handleUpdateFinal(idx, e.target.value)} className="w-full bg-transparent border border-slate-300 dark:border-white/20 rounded-lg px-3 py-1.5 focus:border-ruet-blue dark:focus:border-ruet-gold outline-none text-slate-700 dark:text-slate-300" />
                     </td>
                   </tr>
                 ))}
