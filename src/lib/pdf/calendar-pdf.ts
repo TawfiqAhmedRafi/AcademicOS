@@ -25,8 +25,21 @@ export async function generateCalendarPdf(calendar: any, seriesConfig: any, head
     /* Shrink page margins to utilize more paper space */
     @page { size: A4 portrait; margin: 30px 40px; }
     * { box-sizing: border-box; }
-    body { font-family: "Times New Roman", Times, serif; font-size: 10pt; color: #000; margin: 0; padding: 0; line-height: 1.2; }
-    
+
+    /* html/body fill the page so we can pin content to the bottom */
+    html, body { height: 100%; }
+    body {
+      font-family: "Times New Roman", Times, serif;
+      font-size: 10pt;
+      color: #000;
+      margin: 0;
+      padding: 0;
+      line-height: 1.2;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
     /* Header layout compressed vertically */
     .header { text-align: center; margin-bottom: 12px; }
     .header .quote { font-style: italic; font-size: 10pt; }
@@ -61,8 +74,16 @@ export async function generateCalendarPdf(calendar: any, seriesConfig: any, head
     /* Notes */
     .notes { margin-top: -6px; margin-bottom: 15px; font-size: 9pt; line-height: 1.3; padding-left: 20px; }
     
-    /* Signatures compressed */
-    .signatures { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 30px; font-size: 10pt; text-align: center; }
+    /* Signatures pinned to bottom of the page, still aligned on their baseline */
+    .signatures {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-top: auto;       /* pushes this block to the bottom of the page */
+      padding-top: 40px;      /* breathing room if content above is short */
+      font-size: 10pt;
+      text-align: center;
+    }
     .sign-block { width: 30%; }
     .sign-line { border-top: 1px solid #000; margin-top: 30px; padding-top: 4px; font-weight: bold; }
     .sign-title { font-size: 9pt; }
@@ -147,7 +168,7 @@ export async function generateCalendarPdf(calendar: any, seriesConfig: any, head
       </tbody>
     </table>
 
-    <!-- SIGNATURES -->
+    <!-- SIGNATURES (pinned to bottom of page via margin-top: auto) -->
     <div class="signatures">
       <div class="sign-block">
         ${advisor1 ? `
@@ -164,7 +185,7 @@ export async function generateCalendarPdf(calendar: any, seriesConfig: any, head
       </div>
 
       <div class="sign-block">
-        <div class="sign-title" style="margin-bottom: 15px; text-decoration: underline;">Approved By:</div>
+        <div class="sign-title" style="margin-bottom: 32px; text-decoration: underline;">Approved By:</div>
         <div class="sign-line">${escapeHtml(headDetails?.name || "Head of Department")}</div>
         <div class="sign-title">Head<br/>Dept. of ETE, RUET.</div>
       </div>
@@ -193,6 +214,10 @@ export async function generateCalendarPdf(calendar: any, seriesConfig: any, head
 
   try {
     const page = await browser.newPage();
+    // Set viewport to A4 proportions (96 DPI) so 100vh in the page
+    // maps to the true printed page height, keeping the signature
+    // block correctly pinned to the bottom of the page.
+    await page.setViewport({ width: 794, height: 1123 });
     await page.setContent(html, { waitUntil: "networkidle0" });
     const pdfBytes = await page.pdf({
       format: "A4",
