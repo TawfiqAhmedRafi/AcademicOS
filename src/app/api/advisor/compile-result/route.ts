@@ -41,22 +41,23 @@ export async function POST(req: Request) {
   if (!session?.user?.advising_series) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
   try {
-    const { series, semester } = await req.json();
+    const { series, semester, isBacklog } = await req.json();
     const client = await clientPromise;
     const db = client.db("academicos");
 
-    // Fetch students who are doing Regular Exams OR Backlog Exams OR whose data was Frozen
-    const students = await db.collection("users").find({
-      role: "student",
-      series: String(series),
-      $or: [
+    let query: any = { role: "student", series: String(series) };
+    
+    // If Backlog Mode: Fetch ALL students in the series to make the Unified Sheet
+    // If Regular Mode: Fetch only students approved for the current semester
+    if (!isBacklog) {
+       query.$or = [
         { formFillupStatus: "approved" },
-        { backlogRegStatus: "approved" },
         { academicHistory: { $elemMatch: { semester: semester, resultStatus: "pending" } } }
-      ]
-    }).toArray();
+      ];
+    }
 
-    if (students.length === 0) return NextResponse.json({ error: "No cleared students found." }, { status: 400 });
+    const students = await db.collection("users").find(query).toArray();
+    if (students.length === 0) return NextResponse.json({ error: "No students found for this series." }, { status: 400 });
 
     const courses = await db.collection("courses").find({}).toArray();
     const allMarks = await db.collection("course_marks").find({ series: Number(series) }).toArray();
@@ -66,7 +67,7 @@ export async function POST(req: Request) {
     for (const student of students) {
       const roll = student.studentId || student.email.split('@')[0];
       const studentResult: any = {
-        studentId: student._id.toString(), // Ensuring robust ObjectId to String cast
+        studentId: student._id.toString(),
         roll,
         name: student.name,
         courseGrades: [],
@@ -76,7 +77,6 @@ export async function POST(req: Request) {
         failedCourses: []
       };
 
-      // --- THE SMART COURSE LOCATOR ---
       const frozenSemester = student.academicHistory?.find((h: any) => h.semester === semester && h.resultStatus === "pending");
 
       const rawCourses = frozenSemester ? frozenSemester.courses : (student.registeredCourses || []);
@@ -85,20 +85,17 @@ export async function POST(req: Request) {
       const isRegApproved = frozenSemester ? (frozenSemester.formFillupStatus === "approved") : (student.formFillupStatus === "approved");
       const isBacklogApproved = frozenSemester ? (frozenSemester.backlogRegStatus === "approved") : (student.backlogRegStatus === "approved");
 
-      // Extract raw strings natively, accounting for raw ID formats vs rich object formats
       const targetCourseIds = rawCourses.map((c: any) => typeof c === 'string' ? c : (c.courseCode || c._id?.toString()));
       const targetBacklogIds = rawBacklogs.map((c: any) => typeof c === 'string' ? c : (c.courseCode || c._id?.toString()));
 
       let totalGradePoints = 0;
       let totalEarnedCredits = 0;
 
-      const processCourse = (courseId: string, isBacklog: boolean) => {
-        // Bulletproof catalog match by Object ID OR Course Code string
+      const processCourse = (courseId: string, processingBacklog: boolean) => {
         const course = courses.find(c => c._id.toString() === courseId || c.courseCode === courseId);
         if (!course) return;
 
         const studentUploads = allMarks.filter(m => m.courseCode === course.courseCode && m.marks?.some((sm: any) => sm.roll === roll));
-        
         const continuousUploads = studentUploads.filter(u => !u.segment.includes("Final") && !u.segment.includes("Viva") && !u.segment.includes("Defense") && !u.segment.includes("Showcase"));
         const terminalUploads = studentUploads.filter(u => u.segment.includes("Final") || u.segment.includes("Viva") || u.segment.includes("Defense") || u.segment.includes("Showcase"));
 
@@ -129,7 +126,7 @@ export async function POST(req: Request) {
 
         const sortedTerminal = terminalUploads.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
         
-        if (isBacklog && sortedTerminal.length > 0) {
+        if (processingBacklog && sortedTerminal.length > 0) {
             const backlogPeriodDate = new Date(sortedTerminal[0].uploadedAt);
             const validTerminalUploads = sortedTerminal.filter(u => 
                 (backlogPeriodDate.getTime() - new Date(u.uploadedAt).getTime()) < (30 * 24 * 60 * 60 * 1000) 
@@ -156,18 +153,17 @@ export async function POST(req: Request) {
             });
         }
 
-        const gradeScale = getGradeScale(courseTotal, isBacklog);
-
+        const gradeScale = getGradeScale(courseTotal, processingBacklog);
         const resultObj = {
           courseCode: course.courseCode,
           credits: course.credits,
           totalMarks: courseTotal,
           letterGrade: gradeScale.letter,
           gradePoint: gradeScale.point,
-          isBacklog
+          isBacklog: processingBacklog
         };
 
-        if (isBacklog) {
+        if (processingBacklog) {
           studentResult.backlogGrades.push(resultObj);
         } else {
           studentResult.courseGrades.push(resultObj);
@@ -180,35 +176,31 @@ export async function POST(req: Request) {
         }
       };
 
-      // A. Process Regular Courses
-      if (isRegApproved) {
-        for (const courseId of targetCourseIds) {
-          processCourse(courseId, false);
-        }
+      // --- SPLIT PROCESSING BASED ON MODE ---
+      if (!isBacklog && isRegApproved) {
+        for (const courseId of targetCourseIds) processCourse(courseId, false);
       }
 
-      // B. Process Backlog Courses
-      if (isBacklogApproved) {
-        for (const courseId of targetBacklogIds) {
-          processCourse(courseId, true);
-        }
+      if (isBacklog && isBacklogApproved) {
+        for (const courseId of targetBacklogIds) processCourse(courseId, true);
       }
 
-      // C. Term GPA Calculation
-      if (totalEarnedCredits > 0) {
-        studentResult.semesterGpa = Number((totalGradePoints / totalEarnedCredits).toFixed(2));
+      if (!isBacklog) {
+        if (totalEarnedCredits > 0) studentResult.semesterGpa = Number((totalGradePoints / totalEarnedCredits).toFixed(2));
+        studentResult.earnedCredits = totalEarnedCredits;
       }
-      studentResult.earnedCredits = totalEarnedCredits;
 
-      // D. Cumulative CGPA Logic
-      let cumulativePoints = totalGradePoints;
-      let cumulativeCredits = totalEarnedCredits;
+      // --- CUMULATIVE CGPA LOGIC ---
+      let cumulativePoints = !isBacklog ? totalGradePoints : 0;
+      let cumulativeCredits = !isBacklog ? totalEarnedCredits : 0;
 
       (student.academicHistory || []).forEach((hist: any) => {
         cumulativePoints += (hist.semesterGpa * hist.earnedCredits); 
         cumulativeCredits += hist.earnedCredits;
       });
 
+      // Integrate newly passed backlogs into global CGPA (both for regular and backlog runs)
+      // Because backlogs cleared *during* a regular semester should also boost the global CGPA
       studentResult.backlogGrades.forEach((bg: any) => {
         if (bg.gradePoint > 0) {
           cumulativePoints += (bg.credits * bg.gradePoint);
@@ -218,26 +210,27 @@ export async function POST(req: Request) {
         }
       });
 
-      studentResult.cgpa = cumulativeCredits > 0 ? Number((cumulativePoints / cumulativeCredits).toFixed(2)) : 0;
+      studentResult.cgpa = cumulativeCredits > 0 ? Number((cumulativePoints / cumulativeCredits).toFixed(2)) : (student.cgpa || 0);
       compiledResults.push(studentResult);
     }
 
     const draftPayload = {
       series: Number(series),
-      semester,
+      semester: isBacklog ? `Backlogs_${semester}` : semester, // Unique key for backlog drafts
       compiledBy: session.user.email,
       compiledAt: new Date(),
-      status: "draft", // TABULATION LOCKOUT INITIATED
+      status: "draft",
+      isBacklogDraft: isBacklog,
       results: compiledResults
     };
 
     await db.collection("draft_results").updateOne(
-      { series: Number(series), semester },
+      { series: Number(series), semester: draftPayload.semester },
       { $set: draftPayload },
       { upsert: true }
     );
 
-    return NextResponse.json({ message: "Draft Result Sheet compiled successfully.", draft: draftPayload });
+    return NextResponse.json({ message: "Draft Compiled successfully" }, { status: 201 });
   } catch (error) {
     console.error("Result Compilation Error:", error);
     return NextResponse.json({ error: "Failed to compile results" }, { status: 500 });
@@ -246,12 +239,15 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.advising_series) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  if (!session || !["advisor", "dept_head"].includes(session.user.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
   try {
     const { searchParams } = new URL(req.url);
     const series = searchParams.get("series");
-    const semester = searchParams.get("semester");
+    let semester = searchParams.get("semester");
+    const isBacklog = searchParams.get("isBacklog") === "true";
+
+    if (isBacklog) semester = `Backlogs_${semester}`;
 
     const client = await clientPromise;
     const db = client.db("academicos");
@@ -265,10 +261,13 @@ export async function GET(req: Request) {
 
 export async function PATCH(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.advising_series) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  if (session?.user?.role !== "advisor") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
   try {
-    const { series, semester, action } = await req.json();
+    const { series, action, isBacklog } = await req.json();
+    let { semester } = await req.json();
+    if (isBacklog) semester = `Backlogs_${semester}`;
+
     const client = await clientPromise;
     const db = client.db("academicos");
 
@@ -277,13 +276,12 @@ export async function PATCH(req: Request) {
         { series: Number(series), semester },
         { $set: { status: "pending_head_approval", submittedAt: new Date() } }
       );
-      return NextResponse.json({ message: "Draft successfully sent to the Department Head." });
+      return NextResponse.json({ message: "Submitted to Head" });
     }
 
     if (action === "unlock_draft") {
-      // Allows Advisor to lift the Tabulation Lockout state
       await db.collection("draft_results").deleteOne({ series: Number(series), semester });
-      return NextResponse.json({ message: "Draft deleted. Faculty uploads unlocked." });
+      return NextResponse.json({ message: "Draft deleted." });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });

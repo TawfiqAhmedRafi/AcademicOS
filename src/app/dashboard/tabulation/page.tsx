@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Calculator, Send, AlertCircle, CheckCircle2, Lock, FileText, Download } from "lucide-react";
+import { Loader2, Calculator, Send, AlertCircle, CheckCircle2, Lock, FileText, Download, ShieldAlert } from "lucide-react";
 import { useToast } from "@/app/components/ToastProvider";
 import Swal from "sweetalert2";
 
@@ -10,11 +10,13 @@ export default function TabulationEnginePage() {
   const [activeConfig, setActiveConfig] = useState<any>(null);
   const [draft, setDraft] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  
   const [isCompiling, setIsCompiling] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false); // <-- NEW
-
+  const [isDownloading, setIsDownloading] = useState(false); 
+  
+  // --- NEW: Toggle between Regular and Backlog modes ---
+  const [mode, setMode] = useState<"regular" | "backlog">("regular");
+  
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -30,30 +32,38 @@ export default function TabulationEnginePage() {
     fetchInitData();
   }, []);
 
-  const fetchDraft = async (series: string, semester: string) => {
-    const res = await fetch(`/api/advisor/compile-result?series=${series}&semester=${semester}`);
+  const fetchDraft = async (series: string, semester: string, currentMode: string) => {
+    const isBacklog = currentMode === "backlog";
+    const res = await fetch(`/api/advisor/compile-result?series=${series}&semester=${semester}&isBacklog=${isBacklog}`);
     if (res.ok) {
       const data = await res.json();
       setDraft(data.draft);
+    } else {
+      setDraft(null);
     }
   };
 
   useEffect(() => {
-    if (activeConfig) fetchDraft(activeConfig.series, activeConfig.currentSemester);
-  }, [activeConfig]);
+    if (activeConfig) fetchDraft(activeConfig.series, activeConfig.currentSemester, mode);
+  }, [activeConfig, mode]);
 
   const handleCompile = async () => {
     setIsCompiling(true);
-    showToast("Aggregating faculty marks...", "info");
+    showToast(mode === "backlog" ? "Aggregating backlog marks..." : "Aggregating faculty marks...", "info");
     
     const res = await fetch("/api/advisor/compile-result", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ series: activeConfig.series, semester: activeConfig.currentSemester })
+      body: JSON.stringify({ 
+        series: activeConfig.series, 
+        semester: activeConfig.currentSemester,
+        isBacklog: mode === "backlog" // Pass the mode flag to the backend
+      })
     });
+
     if (res.ok) {
-      showToast("Draft Result Sheet compiled!", "success");
-      await fetchDraft(activeConfig.series, activeConfig.currentSemester);
+      showToast(mode === "backlog" ? "Unified Backlog Sheet compiled!" : "Draft Result Sheet compiled!", "success");
+      await fetchDraft(activeConfig.series, activeConfig.currentSemester, mode);
     } else {
       const data = await res.json();
       showToast(data.error || "Compilation failed.", "error");
@@ -77,30 +87,35 @@ export default function TabulationEnginePage() {
     const res = await fetch("/api/advisor/compile-result", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ series: activeConfig.series, semester: activeConfig.currentSemester, action: "submit_to_head" })
+      body: JSON.stringify({ 
+        series: activeConfig.series, 
+        semester: activeConfig.currentSemester, 
+        isBacklog: mode === "backlog",
+        action: "submit_to_head" 
+      })
     });
+
     if (res.ok) {
       showToast("Forwarded to Head successfully", "success");
-      await fetchDraft(activeConfig.series, activeConfig.currentSemester);
+      await fetchDraft(activeConfig.series, activeConfig.currentSemester, mode);
     } else {
       showToast("Failed to submit.", "error");
     }
     setIsSubmitting(false);
   };
 
-  // --- NEW: Download PDF Handler ---
   const handleDownloadPdf = async () => {
     setIsDownloading(true);
     showToast("Generating official PDF...", "info");
     try {
-      const res = await fetch(`/api/advisor/tabulation-pdf?series=${activeConfig.series}&semester=${activeConfig.currentSemester}`);
+      const res = await fetch(`/api/advisor/tabulation-pdf?series=${activeConfig.series}&semester=${activeConfig.currentSemester}&isBacklog=${mode === "backlog"}`);
       if (!res.ok) throw new Error("Failed to generate PDF");
       
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Tabulation_Series_${activeConfig.series}_Sem_${activeConfig.currentSemester}.pdf`;
+      a.download = `Tabulation_Series_${activeConfig.series}_${mode === "backlog" ? "BACKLOG" : activeConfig.currentSemester}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -113,14 +128,31 @@ export default function TabulationEnginePage() {
   };
 
   if (isLoading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="animate-spin text-ruet-blue dark:text-ruet-gold" size={32} /></div>;
-
   const isLocked = draft?.status === "pending_head_approval" || draft?.status === "published";
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
-      <div className="mb-8">
-        <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white">Result Engine</h1>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Compile aggregated faculty marks into the official Draft Result Sheet.</p>
+      <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white">Result Engine</h1>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Compile aggregated faculty marks into official Draft Result Sheets.</p>
+        </div>
+        
+        {/* --- NEW: Mode Switcher --- */}
+        <div className="flex bg-slate-100 dark:bg-white/5 p-1 rounded-xl w-max">
+          <button 
+            onClick={() => setMode("regular")} 
+            className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${mode === "regular" ? "bg-white text-ruet-blue shadow-sm dark:bg-slate-800 dark:text-ruet-gold" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"}`}
+          >
+            <FileText size={16}/> Regular Exam
+          </button>
+          <button 
+            onClick={() => setMode("backlog")} 
+            className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${mode === "backlog" ? "bg-white text-amber-600 shadow-sm dark:bg-slate-800 dark:text-amber-400" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"}`}
+          >
+            <ShieldAlert size={16}/> Unified Backlogs
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-4 mb-6 custom-scrollbar">
@@ -130,7 +162,7 @@ export default function TabulationEnginePage() {
             onClick={() => setActiveConfig(cfg)}
             className={`px-6 py-3 rounded-xl font-bold text-sm whitespace-nowrap transition-all ${
               activeConfig?.series === cfg.series
-                ? "bg-ruet-blue text-white shadow-md dark:bg-ruet-gold dark:text-black"
+                ? mode === "backlog" ? "bg-amber-500 text-white shadow-md" : "bg-ruet-blue text-white shadow-md dark:bg-ruet-gold dark:text-black"
                 : "bg-white/50 text-slate-600 hover:bg-white/80 dark:bg-white/5 dark:text-slate-300"
             }`}
           >
@@ -145,8 +177,8 @@ export default function TabulationEnginePage() {
           <div className="bg-slate-50/50 dark:bg-white/5 p-6 border-b border-slate-200 dark:border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <FileText className="text-ruet-blue dark:text-ruet-gold" size={20} />
-                Draft Preview
+                {mode === "backlog" ? <ShieldAlert className="text-amber-500" size={20} /> : <FileText className="text-ruet-blue dark:text-ruet-gold" size={20} />}
+                {mode === "backlog" ? "Unified Backlog Preview" : "Draft Preview"}
               </h2>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                 {isLocked ? "This draft is locked for review." : "You can recompile this draft as many times as needed before submitting."}
@@ -154,8 +186,6 @@ export default function TabulationEnginePage() {
             </div>
             
             <div className="flex flex-wrap items-center gap-3">
-              
-              {/* --- NEW: PDF Download Button appears ONLY when Published --- */}
               {draft?.status === "published" && (
                 <button 
                   onClick={handleDownloadPdf}
@@ -166,7 +196,6 @@ export default function TabulationEnginePage() {
                   Download Official PDF
                 </button>
               )}
-
               <button 
                 onClick={handleCompile}
                 disabled={isCompiling || isLocked}
@@ -175,7 +204,6 @@ export default function TabulationEnginePage() {
                 {isCompiling ? <Loader2 size={16} className="animate-spin" /> : isLocked ? <Lock size={16} /> : <Calculator size={16} />}
                 {isLocked ? "Locked" : draft ? "Recompile Draft" : "Compile Results"}
               </button>
-
               {draft && (
                 <button 
                   onClick={handleForwardToHead}
@@ -195,7 +223,7 @@ export default function TabulationEnginePage() {
                 <Calculator className="text-slate-400 dark:text-slate-500" size={32} />
               </div>
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">No Draft Generated</h3>
-              <p className="text-sm text-slate-500 max-w-sm mt-1">Click the Compile button above to calculate the GPA metrics based on the uploaded faculty marks.</p>
+              <p className="text-sm text-slate-500 max-w-sm mt-1">Click the Compile button above to calculate the metrics based on the uploaded faculty marks.</p>
             </div>
           ) : (
             <div className="overflow-x-auto custom-scrollbar">
@@ -204,10 +232,10 @@ export default function TabulationEnginePage() {
                   <tr>
                     <th className="px-6 py-4 font-bold text-slate-600 dark:text-slate-300">Roll Number</th>
                     <th className="px-6 py-4 font-bold text-slate-600 dark:text-slate-300">Student Name</th>
-                    <th className="px-6 py-4 font-bold text-slate-600 dark:text-slate-300 text-center">Term GPA</th>
+                    {mode === "regular" && <th className="px-6 py-4 font-bold text-slate-600 dark:text-slate-300 text-center">Term GPA</th>}
                     <th className="px-6 py-4 font-bold text-slate-600 dark:text-slate-300 text-center">CGPA</th>
-                    <th className="px-6 py-4 font-bold text-slate-600 dark:text-slate-300 text-center">Earned Credits</th>
-                    <th className="px-6 py-4 font-bold text-slate-600 dark:text-slate-300 text-right">Remarks</th>
+                    {mode === "regular" && <th className="px-6 py-4 font-bold text-slate-600 dark:text-slate-300 text-center">Earned Credits</th>}
+                    <th className="px-6 py-4 font-bold text-slate-600 dark:text-slate-300 text-right">Remarks / Courses</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-white/5">
@@ -216,33 +244,54 @@ export default function TabulationEnginePage() {
                       <td className="px-6 py-4 font-mono font-bold text-slate-900 dark:text-white">{res.roll}</td>
                       <td className="px-6 py-4 font-medium text-slate-700 dark:text-slate-300">{res.name}</td>
                       
-                      <td className="px-6 py-4 text-center">
-                        <span className={`font-black ${res.semesterGpa >= 3.75 ? 'text-emerald-600 dark:text-emerald-400' : res.semesterGpa >= 3.0 ? 'text-blue-600 dark:text-blue-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                          {res.semesterGpa.toFixed(2)}
-                        </span>
-                      </td>
+                      {mode === "regular" && (
+                        <td className="px-6 py-4 text-center">
+                          <span className={`font-black ${res.semesterGpa >= 3.75 ? 'text-emerald-600 dark:text-emerald-400' : res.semesterGpa >= 3.0 ? 'text-blue-600 dark:text-blue-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                            {res.semesterGpa.toFixed(2)}
+                          </span>
+                        </td>
+                      )}
                       
                       <td className="px-6 py-4 text-center font-bold text-slate-900 dark:text-white">
                         {res.cgpa.toFixed(2)}
                       </td>
                       
-                      <td className="px-6 py-4 text-center text-slate-600 dark:text-slate-400 font-medium">
-                        {res.earnedCredits.toFixed(2)}
-                      </td>
+                      {mode === "regular" && (
+                        <td className="px-6 py-4 text-center text-slate-600 dark:text-slate-400 font-medium">
+                          {res.earnedCredits.toFixed(2)}
+                        </td>
+                      )}
                       
                       <td className="px-6 py-4 text-right">
-                        {res.failedCourses && res.failedCourses.length > 0 ? (
-                          <div className="flex flex-col items-end gap-1">
-                            {res.failedCourses.map((fc: string) => (
-                              <span key={fc} className="bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1">
-                                <AlertCircle size={10} /> {fc} (F)
-                              </span>
-                            ))}
-                          </div>
+                        {mode === "backlog" ? (
+                          // Render Backlog Results
+                          res.backlogGrades && res.backlogGrades.length > 0 ? (
+                            <div className="flex flex-col items-end gap-1">
+                              {res.backlogGrades.map((bg: any) => (
+                                <span key={bg.courseCode} className={`text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 ${bg.gradePoint > 0 ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400' : 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400'}`}>
+                                  {bg.gradePoint === 0 ? <AlertCircle size={10} /> : <CheckCircle2 size={10} />}
+                                  {bg.courseCode} ({bg.letterGrade})
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-xs font-semibold">N/A</span>
+                          )
                         ) : (
-                          <span className="text-emerald-500 dark:text-emerald-400 text-xs font-bold uppercase tracking-wider flex items-center justify-end gap-1">
-                            <CheckCircle2 size={12} /> Cleared
-                          </span>
+                          // Render Regular Results
+                          res.failedCourses && res.failedCourses.length > 0 ? (
+                            <div className="flex flex-col items-end gap-1">
+                              {res.failedCourses.map((fc: string) => (
+                                <span key={fc} className="bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1">
+                                  <AlertCircle size={10} /> {fc} (F)
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-emerald-500 dark:text-emerald-400 text-xs font-bold uppercase tracking-wider flex items-center justify-end gap-1">
+                              <CheckCircle2 size={12} /> Cleared
+                            </span>
+                          )
                         )}
                       </td>
                     </tr>

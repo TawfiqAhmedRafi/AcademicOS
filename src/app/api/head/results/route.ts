@@ -32,58 +32,36 @@ export async function PATCH(req: Request) {
       const draft = await db.collection("draft_results").findOne({ _id: new ObjectId(draftId) });
       if (!draft) return NextResponse.json({ error: "Draft not found" }, { status: 404 });
 
-      // Fetch students to check if they have a frozen history block
       const studentIds = draft.results.map((r: any) => new ObjectId(r.studentId));
       const students = await db.collection("users").find({ _id: { $in: studentIds } }).toArray();
 
       const bulkOps = draft.results.flatMap((res: any) => {
         const student = students.find(s => s._id.toString() === res.studentId);
-        const passedCourses = res.courseGrades.filter((c: any) => c.gradePoint > 0).map((c: any) => c.courseCode);
+
+        // Target passed backlogs to remove them from the active flags
+        const passedCourses = res.isBacklogDraft
+          ? res.backlogGrades.filter((c: any) => c.gradePoint > 0).map((c: any) => c.courseCode)
+          : res.courseGrades.filter((c: any) => c.gradePoint > 0).map((c: any) => c.courseCode);
+
         const failedCourses = res.failedCourses || [];
         const ops = [];
 
-        // Check if the student has a frozen block for this semester (Stage 1 was executed)
-        const hasFrozenHistory = student?.academicHistory?.some((h: any) => h.semester === draft.semester && h.resultStatus === "pending");
-
-        if (hasFrozenHistory) {
-          // --- STAGE 2 INJECTION (They were already promoted) ---
-          ops.push({
-            updateOne: {
-              filter: { _id: new ObjectId(res.studentId), "academicHistory.semester": draft.semester },
-              update: {
-                $set: {
-                  "academicHistory.$.publishedAt": new Date(),
-                  "academicHistory.$.semesterGpa": res.semesterGpa,
-                  "academicHistory.$.earnedCredits": res.earnedCredits,
-                  "academicHistory.$.courses": [...res.courseGrades, ...(res.backlogGrades || [])], // Overwrites raw IDs
-                  "academicHistory.$.resultStatus": "published",
-                  cgpa: res.cgpa
-                },
-                $pull: { activeBacklogs: { $in: passedCourses } }
-              }
-            }
-          });
-        } else {
-          // --- STANDARD PUSH (They haven't been promoted yet) ---
+        // --- BACKLOG RESULT INJECTION ---
+        if (draft.isBacklogDraft) {
           ops.push({
             updateOne: {
               filter: { _id: new ObjectId(res.studentId) },
               update: {
                 $push: {
                   academicHistory: {
-                    semester: draft.semester,
+                    semester: draft.semester, // This will say "Backlogs_4-1"
                     publishedAt: new Date(),
-                    semesterGpa: res.semesterGpa,
-                    earnedCredits: res.earnedCredits,
-                    courses: [...res.courseGrades, ...(res.backlogGrades || [])],
+                    courses: res.backlogGrades,
                     resultStatus: "published"
                   }
                 },
                 $set: {
                   cgpa: res.cgpa,
-                  registrationStatus: "unregistered",
-                  formFillupStatus: "unregistered",
-                  registeredCourses: [],
                   backlogRegStatus: "unregistered",
                   registeredBacklogs: []
                 },
@@ -92,9 +70,56 @@ export async function PATCH(req: Request) {
             }
           });
         }
+        // --- REGULAR SEMESTER INJECTION ---
+        else {
+          const hasFrozenHistory = student?.academicHistory?.some((h: any) => h.semester === draft.semester && h.resultStatus === "pending");
 
-        // Add to active backlogs if they failed any
-        if (failedCourses.length > 0) {
+          if (hasFrozenHistory) {
+            ops.push({
+              updateOne: {
+                filter: { _id: new ObjectId(res.studentId), "academicHistory.semester": draft.semester },
+                update: {
+                  $set: {
+                    "academicHistory.$.publishedAt": new Date(),
+                    "academicHistory.$.semesterGpa": res.semesterGpa,
+                    "academicHistory.$.earnedCredits": res.earnedCredits,
+                    "academicHistory.$.courses": res.courseGrades,
+                    "academicHistory.$.resultStatus": "published",
+                    cgpa: res.cgpa
+                  },
+                  $pull: { activeBacklogs: { $in: passedCourses } }
+                }
+              }
+            });
+          } else {
+            ops.push({
+              updateOne: {
+                filter: { _id: new ObjectId(res.studentId) },
+                update: {
+                  $push: {
+                    academicHistory: {
+                      semester: draft.semester,
+                      publishedAt: new Date(),
+                      semesterGpa: res.semesterGpa,
+                      earnedCredits: res.earnedCredits,
+                      courses: res.courseGrades,
+                      resultStatus: "published"
+                    }
+                  },
+                  $set: {
+                    cgpa: res.cgpa,
+                    registrationStatus: "unregistered",
+                    formFillupStatus: "unregistered",
+                    registeredCourses: []
+                  },
+                  $pull: { activeBacklogs: { $in: passedCourses } }
+                }
+              }
+            });
+          }
+        }
+
+        if (failedCourses.length > 0 && !draft.isBacklogDraft) {
           ops.push({
             updateOne: {
               filter: { _id: new ObjectId(res.studentId) },
@@ -111,7 +136,6 @@ export async function PATCH(req: Request) {
         { $set: { status: "published", publishedAt: new Date(), publishedBy: session.user.email } }
       );
 
-      await logSystemAction("Results Published", "Audit", `Department Head published Semester ${draft.semester} results for Series ${draft.series}.`);
       return NextResponse.json({ message: "Results officially published and synced." });
     }
 
