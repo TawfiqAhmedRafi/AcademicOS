@@ -13,7 +13,8 @@ import {
   CheckCheck,
   FileText,
   BookOpen,
-  AlertCircle // <-- Make sure AlertCircle is imported!
+  AlertCircle,
+  ShieldAlert // <-- Imported for Backlog Icon
 } from "lucide-react";
 import { useToast } from "@/app/components/ToastProvider";
 import DropdownFilter from "@/app/components/DropdownFilter";
@@ -36,6 +37,7 @@ type Student = {
   studentId?: string;
   registrationStatus?: "unregistered" | "pending" | "approved";
   formFillupStatus?: "unregistered" | "pending" | "approved";
+  backlogRegStatus?: "unregistered" | "pending" | "approved"; // <-- NEW
 };
 
 export default function SeriesRosterPage() {
@@ -43,14 +45,18 @@ export default function SeriesRosterPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [activeSeries, setActiveSeries] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Added backlog to bulk approve state
   const [isBulkApproving, setIsBulkApproving] = useState<{
     reg: boolean;
     ff: boolean;
-  }>({ reg: false, ff: false });
+    backlog: boolean;
+  }>({ reg: false, ff: false, backlog: false });
 
   // Filter States
   const [regFilter, setRegFilter] = useState("all");
   const [ffFilter, setFfFilter] = useState("all");
+  const [backlogFilter, setBacklogFilter] = useState("all"); // <-- NEW
 
   const { showToast } = useToast();
 
@@ -90,9 +96,9 @@ export default function SeriesRosterPage() {
     }
   };
 
-  const handleBulkApprove = async (series: string, type: "reg" | "ff") => {
-    const action = type === "reg" ? "bulk_approve_reg" : "bulk_approve_ff";
-    const label = type === "reg" ? "Course Registrations" : "Form Fill-ups";
+  const handleBulkApprove = async (series: string, type: "reg" | "ff" | "backlog") => {
+    const action = type === "reg" ? "bulk_approve_reg" : type === "ff" ? "bulk_approve_ff" : "bulk_approve_backlog";
+    const label = type === "reg" ? "Course Registrations" : type === "ff" ? "Form Fill-ups" : "Backlog Registrations";
 
     const result = await Swal.fire({
       title: "Approve All?",
@@ -105,7 +111,6 @@ export default function SeriesRosterPage() {
     });
 
     if (!result.isConfirmed) return;
-
     setIsBulkApproving((prev) => ({ ...prev, [type]: true }));
     await handleAction(series, action);
     setIsBulkApproving((prev) => ({ ...prev, [type]: false }));
@@ -114,12 +119,10 @@ export default function SeriesRosterPage() {
   if (isLoading)
     return (
       <div className="flex h-[60vh] items-center justify-center">
-        <Loader2
-          className="animate-spin text-ruet-blue dark:text-ruet-gold"
-          size={32}
-        />
+        <Loader2 className="animate-spin text-ruet-blue dark:text-ruet-gold" size={32} />
       </div>
     );
+
   if (seriesData.length === 0)
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center animate-in fade-in">
@@ -134,12 +137,8 @@ export default function SeriesRosterPage() {
     );
 
   const activeConfig = seriesData.find((s) => s.series === activeSeries);
-  const formFillup = activeConfig?.formFillup || {
-    isOpen: false,
-    deadline: null,
-  };
+  const formFillup = activeConfig?.formFillup || { isOpen: false, deadline: null };
 
-  // Extract roll and sort
   const activeStudents = students
     .filter((s) => s.series === activeSeries)
     .sort((a, b) => {
@@ -148,23 +147,17 @@ export default function SeriesRosterPage() {
       return rollA.localeCompare(rollB, undefined, { numeric: true });
     });
 
-  // Client-side filtering logic
+  // Updated client-side filtering logic
   const filteredStudents = activeStudents.filter((student) => {
-    const matchReg =
-      regFilter === "all" ||
-      (student.registrationStatus || "unregistered") === regFilter;
-    const matchFf =
-      ffFilter === "all" ||
-      (student.formFillupStatus || "unregistered") === ffFilter;
-    return matchReg && matchFf;
+    const matchReg = regFilter === "all" || (student.registrationStatus || "unregistered") === regFilter;
+    const matchFf = ffFilter === "all" || (student.formFillupStatus || "unregistered") === ffFilter;
+    const matchBacklog = backlogFilter === "all" || (student.backlogRegStatus || "unregistered") === backlogFilter;
+    return matchReg && matchFf && matchBacklog;
   });
 
-  const pendingRegCount = activeStudents.filter(
-    (s) => s.registrationStatus === "pending",
-  ).length;
-  const pendingFFCount = activeStudents.filter(
-    (s) => s.formFillupStatus === "pending",
-  ).length;
+  const pendingRegCount = activeStudents.filter((s) => s.registrationStatus === "pending").length;
+  const pendingFFCount = activeStudents.filter((s) => s.formFillupStatus === "pending").length;
+  const pendingBacklogCount = activeStudents.filter((s) => s.backlogRegStatus === "pending").length; // <-- NEW
 
   const getStatusBadge = (status?: string) => {
     if (status === "approved")
@@ -186,16 +179,21 @@ export default function SeriesRosterPage() {
     );
   };
 
-  // Dropdown options
   const regOptions = [
     { label: "Course Reg: All", value: "all" },
     { label: "Approved", value: "approved" },
     { label: "Pending", value: "pending" },
     { label: "Unregistered", value: "unregistered" },
   ];
-
   const ffOptions = [
     { label: "Form Fill: All", value: "all" },
+    { label: "Approved", value: "approved" },
+    { label: "Pending", value: "pending" },
+    { label: "Unregistered", value: "unregistered" },
+  ];
+  // --- NEW OPTIONS ---
+  const backlogOptions = [
+    { label: "Backlogs: All", value: "all" },
     { label: "Approved", value: "approved" },
     { label: "Pending", value: "pending" },
     { label: "Unregistered", value: "unregistered" },
@@ -218,8 +216,9 @@ export default function SeriesRosterPage() {
             key={cfg.series}
             onClick={() => {
               setActiveSeries(cfg.series);
-              setRegFilter("all"); // Reset filters on tab change
+              setRegFilter("all");
               setFfFilter("all");
+              setBacklogFilter("all"); // Reset new filter
             }}
             className={`px-6 py-3 rounded-xl font-bold text-sm whitespace-nowrap transition-all ${
               activeSeries === cfg.series
@@ -393,6 +392,12 @@ export default function SeriesRosterPage() {
                   value={ffFilter}
                   onChange={setFfFilter}
                 />
+                <DropdownFilter
+                  icon={<ShieldAlert size={16} />}
+                  options={backlogOptions}
+                  value={backlogFilter}
+                  onChange={setBacklogFilter}
+                />
               </div>
             </div>
 
@@ -406,8 +411,7 @@ export default function SeriesRosterPage() {
                     <th className="px-6 py-4 font-semibold text-slate-600 dark:text-slate-300">
                       Student Info
                     </th>
-
-                    {/* Course Registration Column with Bulk Action */}
+                    {/* Course Registration Column */}
                     <th className="px-6 py-3 font-semibold text-slate-600 dark:text-slate-300 bg-blue-50/50 dark:bg-blue-900/10 border-l border-white dark:border-slate-800">
                       <div className="flex flex-col gap-2">
                         <span className="text-xs uppercase tracking-wider text-ruet-blue dark:text-blue-400">
@@ -431,8 +435,7 @@ export default function SeriesRosterPage() {
                         </button>
                       </div>
                     </th>
-
-                    {/* Form Fill-up Column with Bulk Action */}
+                    {/* Form Fill-up Column */}
                     <th className="px-6 py-3 font-semibold text-slate-600 dark:text-slate-300 bg-emerald-50/50 dark:bg-emerald-900/10 border-l border-white dark:border-slate-800">
                       <div className="flex flex-col gap-2">
                         <span className="text-xs uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
@@ -454,13 +457,35 @@ export default function SeriesRosterPage() {
                         </button>
                       </div>
                     </th>
+                    {/* --- NEW: Backlog Exams Column --- */}
+                    <th className="px-6 py-3 font-semibold text-slate-600 dark:text-slate-300 bg-amber-50/50 dark:bg-amber-900/10 border-l border-white dark:border-slate-800">
+                      <div className="flex flex-col gap-2">
+                        <span className="text-xs uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                          Backlog Exams
+                        </span>
+                        <button
+                          onClick={() =>
+                            handleBulkApprove(activeConfig.series, "backlog")
+                          }
+                          disabled={pendingBacklogCount === 0 || isBulkApproving.backlog}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-amber-200 rounded-lg text-xs font-bold text-amber-700 hover:bg-amber-50 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-slate-800 dark:border-amber-900/50 dark:text-amber-400 dark:hover:bg-slate-700 transition-colors w-max"
+                        >
+                          {isBulkApproving.backlog ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <CheckCheck size={14} />
+                          )}
+                          Approve All ({pendingBacklogCount})
+                        </button>
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                   {filteredStudents.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={4}
+                        colSpan={5}
                         className="px-6 py-8 text-center text-slate-500 dark:text-slate-400"
                       >
                         {activeStudents.length === 0
@@ -470,8 +495,7 @@ export default function SeriesRosterPage() {
                     </tr>
                   ) : (
                     filteredStudents.map((student) => {
-                      const computedRoll =
-                        student.studentId || student.email.split("@")[0];
+                      const computedRoll = student.studentId || student.email.split("@")[0];
                       return (
                         <tr
                           key={student._id}
@@ -493,6 +517,10 @@ export default function SeriesRosterPage() {
                           </td>
                           <td className="px-6 py-4 border-l border-slate-50 dark:border-white/5 bg-emerald-50/10 dark:bg-emerald-900/5">
                             {getStatusBadge(student.formFillupStatus)}
+                          </td>
+                          {/* --- NEW: Backlog Exams Data --- */}
+                          <td className="px-6 py-4 border-l border-slate-50 dark:border-white/5 bg-amber-50/10 dark:bg-amber-900/5">
+                            {getStatusBadge(student.backlogRegStatus)}
                           </td>
                         </tr>
                       );

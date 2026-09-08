@@ -7,13 +7,13 @@ import { useToast } from "@/app/components/ToastProvider";
 export default function PendingApprovalsPage() {
   const [students, setStudents] = useState<any[]>([]);
   const [seriesData, setSeriesData] = useState<any[]>([]);
-  const [courses, setCourses] = useState<any[]>([]); // NEW: Store courses for mapping
+  const [courses, setCourses] = useState<any[]>([]); 
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'registration' | 'formFillup'>('registration');
+  
+  // Expanded activeTab to include backlog
+  const [activeTab, setActiveTab] = useState<'registration' | 'formFillup' | 'backlog'>('registration');
   const [processingId, setProcessingId] = useState<string | null>(null);
-  
   const [payloadModal, setPayloadModal] = useState<any | null>(null);
-  
   const { showToast } = useToast();
 
   const fetchData = async () => {
@@ -23,7 +23,7 @@ export default function PendingApprovalsPage() {
       const data = await res.json();
       setSeriesData(data.seriesData);
       setStudents(data.students);
-      setCourses(data.courses || []); // NEW: Save courses to state
+      setCourses(data.courses || []); 
     }
     setIsLoading(false);
   };
@@ -36,8 +36,11 @@ export default function PendingApprovalsPage() {
     let action = "";
     if (activeTab === 'registration') {
       action = isApproved ? "approve_individual_reg" : "reject_individual_reg";
-    } else {
+    } else if (activeTab === 'formFillup') {
       action = isApproved ? "approve_individual_ff" : "reject_individual_ff";
+    } else {
+      // NEW: Backlog Actions
+      action = isApproved ? "approve_individual_backlog" : "reject_individual_backlog";
     }
 
     const res = await fetch("/api/advisor/roster", {
@@ -52,6 +55,7 @@ export default function PendingApprovalsPage() {
         if (s._id === studentId) {
           if (activeTab === 'registration') return { ...s, registrationStatus: isApproved ? 'approved' : 'unregistered' };
           if (activeTab === 'formFillup') return { ...s, formFillupStatus: isApproved ? 'approved' : 'unregistered' };
+          if (activeTab === 'backlog') return { ...s, backlogRegStatus: isApproved ? 'approved' : 'unregistered' }; // NEW
         }
         return s;
       }));
@@ -64,9 +68,9 @@ export default function PendingApprovalsPage() {
   if (isLoading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="animate-spin text-ruet-blue dark:text-ruet-gold" size={32} /></div>;
 
   const pendingStudents = students.filter(s => 
-    activeTab === 'registration' 
-      ? s.registrationStatus === 'pending' 
-      : s.formFillupStatus === 'pending'
+     activeTab === 'registration' ? s.registrationStatus === 'pending'
+       : activeTab === 'formFillup' ? s.formFillupStatus === 'pending'
+       : s.backlogRegStatus === 'pending' // NEW
   ).sort((a, b) => {
     const rollA = a.studentId || a.email.split('@')[0];
     const rollB = b.studentId || b.email.split('@')[0];
@@ -75,6 +79,7 @@ export default function PendingApprovalsPage() {
 
   const regPendingCount = students.filter(s => s.registrationStatus === 'pending').length;
   const ffPendingCount = students.filter(s => s.formFillupStatus === 'pending').length;
+  const backlogPendingCount = students.filter(s => s.backlogRegStatus === 'pending').length; // NEW
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -98,6 +103,15 @@ export default function PendingApprovalsPage() {
           Form Fill-ups 
           {ffPendingCount > 0 && <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full text-[10px] dark:bg-purple-500/20 dark:text-purple-400">{ffPendingCount}</span>}
         </button>
+        
+        {/* --- NEW: Backlog Exams Tab --- */}
+        <button 
+          onClick={() => setActiveTab('backlog')}
+          className={`pb-4 px-2 text-sm font-bold flex items-center gap-2 transition-colors border-b-2 ${activeTab === 'backlog' ? 'border-ruet-blue text-ruet-blue dark:border-ruet-gold dark:text-ruet-gold' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
+        >
+          Backlog Exams 
+          {backlogPendingCount > 0 && <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-[10px] dark:bg-amber-500/20 dark:text-amber-400">{backlogPendingCount}</span>}
+        </button>
       </div>
 
       {pendingStudents.length === 0 ? (
@@ -111,6 +125,9 @@ export default function PendingApprovalsPage() {
           {pendingStudents.map(student => {
             const roll = student.studentId || student.email.split('@')[0];
             const isProcessing = processingId === student._id;
+            
+            // Render specific payload arrays based on the tab
+            const submissionArray = activeTab === 'backlog' ? student.registeredBacklogs : student.registeredCourses;
 
             return (
               <div key={student._id} className="glass-panel rounded-3xl p-6 flex flex-col justify-between transition-transform hover:-translate-y-1 relative overflow-hidden">
@@ -141,7 +158,7 @@ export default function PendingApprovalsPage() {
                       <ArrowRight size={14} className="transition-transform group-hover:translate-x-1" />
                     </div>
                     <p className="text-sm text-slate-700 dark:text-slate-300 italic opacity-70">
-                      {student.registeredCourses ? `${student.registeredCourses.length} courses selected. Click to view.` : "No courses selected."}
+                      {submissionArray ? `${submissionArray.length} courses selected. Click to view.` : "No courses selected."}
                     </p>
                   </button>
                 </div>
@@ -185,29 +202,34 @@ export default function PendingApprovalsPage() {
               
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 border-b border-slate-200 dark:border-slate-700 pb-2">Selected Courses</h4>
               
-              {payloadModal.registeredCourses && payloadModal.registeredCourses.length > 0 ? (
-                <ul className="space-y-3">
-                  {payloadModal.registeredCourses.map((id: string, idx: number) => {
-                    // NEW: Find the matching course from our catalog
-                    const courseMatch = courses.find(c => c._id === id);
-                    
-                    return (
-                      <li key={idx} className="flex items-center justify-between bg-white dark:bg-black/20 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                        <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                          {courseMatch ? courseMatch.courseCode : id}
-                        </span>
-                        {courseMatch && (
-                          <span className="text-[10px] uppercase font-semibold text-slate-400 max-w-[50%] text-right truncate" title={courseMatch.title}>
-                            {courseMatch.title}
-                          </span>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : (
-                <p className="text-sm italic opacity-70 text-slate-500">No courses submitted.</p>
-              )}
+              {/* Check based on which tab was active to render the correct payload */}
+              {(() => {
+                const targetArray = activeTab === 'backlog' ? payloadModal.registeredBacklogs : payloadModal.registeredCourses;
+                if (targetArray && targetArray.length > 0) {
+                  return (
+                    <ul className="space-y-3">
+                      {targetArray.map((id: string, idx: number) => {
+                        const courseMatch = courses.find(c => c._id === id);
+                        return (
+                          <li key={idx} className="flex items-center justify-between bg-white dark:bg-black/20 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                            <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                              {courseMatch ? courseMatch.courseCode : id}
+                            </span>
+                            {courseMatch && (
+                              <span className="text-[10px] uppercase font-semibold text-slate-400 max-w-[50%] text-right truncate" title={courseMatch.title}>
+                                {courseMatch.title}
+                              </span>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  );
+                } else {
+                  return <p className="text-sm italic opacity-70 text-slate-500">No courses submitted.</p>;
+                }
+              })()}
+
             </div>
             
             <button 
