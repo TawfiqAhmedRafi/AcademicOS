@@ -9,7 +9,8 @@ import {
   LayoutDashboard, BookOpen, FileText, GraduationCap, Calendar, 
   UploadCloud, ShieldAlert, Users, CheckSquare, Network, BarChart3, 
   Database, UserCog, LogOut, Briefcase, Sun, Moon,
-  Calculator
+  Calculator,
+  CalendarDays
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -34,6 +35,7 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
     { name: "Course Registration", href: "/dashboard/registration", icon: BookOpen },
     { name: "Backlog Registration", href: "/dashboard/backlog-registration", icon: ShieldAlert },
     { name: "Form Fill-up", href: "/dashboard/form-fillup", icon: FileText },
+    { name: "Academic Calendar", href: "/dashboard/calendar", icon: CalendarDays },
     { name: "Academic Results", href: "/dashboard/results", icon: GraduationCap },
     { name: "Class Routine", href: "/dashboard/routine", icon: Calendar },
   ];
@@ -49,6 +51,7 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
     { name: "Series Roster", href: "/dashboard/roster", icon: Users },
     { name: "Result Engine", href: "/dashboard/tabulation", icon: Calculator },
     { name: "Pending Approvals", href: "/dashboard/approvals", icon: CheckSquare },
+    { name: "Calendar Builder", href: "/dashboard/calendar-builder", icon: CalendarDays },
   ];
 
   const deptHeadLinks = [
