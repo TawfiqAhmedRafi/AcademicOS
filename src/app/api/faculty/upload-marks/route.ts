@@ -85,7 +85,17 @@ export async function POST(req: NextRequest) {
 
     const client = await clientPromise;
     const db = client.db("academicos");
-
+// --- TABULATION LOCKOUT ENFORCEMENT ---
+    // Look up the semester for this course slot
+    const slot = await db.collection("routine_slots").findOne({ series: Number(series), courseCode });
+    if (slot) {
+       const draft = await db.collection("draft_results").findOne({ series: Number(series), semester: slot.semester });
+       if (draft) {
+           return NextResponse.json({ 
+              error: "Tabulation Lockout: The Course Advisor is currently compiling a draft. Uploads are strictly locked." 
+           }, { status: 403 });
+       }
+    }
     await db.collection("course_marks").updateOne(
       { 
         courseCode, 

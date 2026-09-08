@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Loader2, Download, Upload, CheckCircle2, EyeOff, FileSpreadsheet, AlertCircle, Check, Filter } from "lucide-react";
+import { Loader2, Download, Upload, CheckCircle2, EyeOff, FileSpreadsheet, AlertCircle, Check, Filter, Lock } from "lucide-react";
 import { useToast } from "@/app/components/ToastProvider";
 import DropdownFilter from "@/app/components/DropdownFilter";
 
@@ -15,6 +15,7 @@ type MarkCourse = {
   teacherCount: number;
   completedSegments: string[];
   isXXPending: boolean;
+  isLocked: boolean; // <-- ENFORCED
 };
 
 // Dynamic Segments based on Teacher Count & Course Code
@@ -191,9 +192,7 @@ export default function FacultyMarksDashboard() {
         <div className="space-y-8">
           {[...filteredCourses]
             .sort((a, b) => {
-              // 1. Primary Sort: Series Seniority (Ascending: 20 comes before 22)
               if (a.series !== b.series) return a.series - b.series;
-              // 2. Secondary Sort: Alphabetical by Course Code
               return a.courseCode.localeCompare(b.courseCode);
             })
             .map((course) => {
@@ -236,6 +235,14 @@ export default function FacultyMarksDashboard() {
                     <span className="text-xs font-semibold text-amber-800 dark:text-amber-200">Enter exact course code above to unlock uploads. Press Enter to save.</span>
                   </div>
                 )}
+                
+                {/* --- NEW: TABULATION LOCKOUT BANNER --- */}
+                {course.isLocked && (
+                  <div className="bg-red-50 dark:bg-red-500/10 p-3 flex items-center gap-2 border-b border-red-100 dark:border-red-500/20">
+                    <Lock size={16} className="text-red-600 dark:text-red-400" />
+                    <span className="text-xs font-semibold text-red-800 dark:text-red-200">Tabulation Lockout: The Course Advisor is compiling the draft. Uploads are locked.</span>
+                  </div>
+                )}
 
                 <div className={`p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${course.isXXPending ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
                   {segments.map((segment, idx) => {
@@ -256,17 +263,19 @@ export default function FacultyMarksDashboard() {
                           <button onClick={() => handleDownloadDemo(course.courseCode, course.series, segment)} className="w-full flex items-center justify-center gap-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 py-2 rounded-xl text-xs font-bold transition-colors">
                             <FileSpreadsheet size={14} className="text-emerald-600 dark:text-emerald-400" /> Template
                           </button>
+                          
+                          {/* --- ENFORCING LOCKOUT ON BUTTON --- */}
                           <button 
                             onClick={() => triggerUploadClick(course.courseCode, course.series, segment)}
-                            disabled={isUploading}
-                            className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-colors shadow-sm disabled:opacity-50 ${isCompleted ? 'bg-slate-800 text-white hover:bg-slate-700 dark:bg-white dark:text-black dark:hover:bg-slate-200' : 'bg-ruet-blue text-white hover:bg-blue-900 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400'}`}
+                            disabled={isUploading || course.isLocked}
+                            className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-colors shadow-sm disabled:opacity-50 ${course.isLocked ? 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed' : isCompleted ? 'bg-slate-800 text-white hover:bg-slate-700 dark:bg-white dark:text-black dark:hover:bg-slate-200' : 'bg-ruet-blue text-white hover:bg-blue-900 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400'}`}
                           >
                             {isUploading && uploadTarget?.segment === segment && uploadTarget?.courseCode === course.courseCode ? (
                               <Loader2 size={14} className="animate-spin" />
                             ) : (
-                              isCompleted ? <Check size={14} /> : <Upload size={14} />
+                              course.isLocked ? <Lock size={14} /> : isCompleted ? <Check size={14} /> : <Upload size={14} />
                             )}
-                            {isCompleted ? "Update Marks" : "Upload Marks"}
+                            {course.isLocked ? "Locked" : isCompleted ? "Update Marks" : "Upload Marks"}
                           </button>
                         </div>
                       </div>

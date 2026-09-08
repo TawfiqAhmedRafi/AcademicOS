@@ -4,7 +4,6 @@ import { authOptions } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 
-// Helper to calculate the previous semester safely (e.g., "2-2" -> "2-1")
 const getPreviousSemester = (sem: string) => {
   if (!sem) return null;
   const [year, term] = sem.split('-').map(Number);
@@ -27,7 +26,6 @@ export async function GET() {
 
     const activeSeries = await db.collection("series").find({ status: "active" }).toArray();
     
-    // --- SMART FETCHING: Grab current AND previous semester slots ---
     const orConditions = activeSeries.flatMap(s => {
       const prevSem = getPreviousSemester(s.currentSemester);
       const conditions = [{ series: Number(s.series), semester: s.currentSemester }];
@@ -42,9 +40,18 @@ export async function GET() {
         teachers: initials
       }).toArray();
 
+      // --- TABULATION LOCKOUT STATE DETECTION ---
+      const activeDrafts = await db.collection("draft_results").find({
+        series: { $in: activeSeries.map(s => Number(s.series)) }
+      }).toArray();
+
       const courseMap = new Map();
       slots.forEach(slot => {
         const key = `${slot.series}-${slot.courseCode}`;
+        
+        // Detect if a draft is actively blocking uploads for this specific term
+        const isLocked = activeDrafts.some(draft => draft.series === slot.series && draft.semester === slot.semester);
+
         if (!courseMap.has(key)) {
           courseMap.set(key, {
             uniqueId: slot._id.toString(),
@@ -55,7 +62,8 @@ export async function GET() {
             isSpecial: ["project", "thesis", "seminar"].includes(slot.type),
             teacherCount: slot.teachers?.length || 1,
             completedSegments: slot.completedSegments || [],
-            isXXPending: slot.courseCode.includes("XX")
+            isXXPending: slot.courseCode.includes("XX"),
+            isLocked // Pass to frontend
           });
         }
       });
@@ -79,9 +87,7 @@ export async function PATCH(req: Request) {
     const client = await clientPromise;
     const db = client.db("academicos");
 
-    // --- ISSUE 2 FIX: Validated XX Resolution ---
     if (action === "resolve_xx" && resolvedCode) {
-      // Cross-reference against the official catalog to prevent typos!
       const validCourse = await db.collection("courses").findOne({ courseCode: resolvedCode });
       if (!validCourse) return NextResponse.json({ error: "Invalid course code. Not found in catalog." }, { status: 400 });
 
