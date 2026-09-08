@@ -5,7 +5,8 @@ import clientPromise from "@/lib/mongodb";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
-  if (session?.user?.role !== "admin") {
+// --- FIX: Check for BOTH the 'admin' role OR the 'isAdmin' boolean flag ---
+  if (!session?.user || (session.user.role !== "admin" && !session.user.isAdmin)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
