@@ -103,7 +103,8 @@ export async function generateCalendarPdf(calendar: any, seriesConfig: any, head
         <tr><td colspan="5" class="table-title">Class and Examination Schedule</td></tr>
         <tr>
           <th class="col-header">Description</th>
-          <th class="col-header" colspan="3">Date</th>
+          <th class="col-header" >From</th>
+          <th class="col-header" >To</th>
           <th class="col-header">Duration</th>
         </tr>
       </thead>
@@ -112,7 +113,7 @@ export async function generateCalendarPdf(calendar: any, seriesConfig: any, head
           <tr>
             <td class="t1-desc">${escapeHtml(ev.description)}</td>
             <td class="t1-date t1-from">${formatShortDate(ev.from)}</td>
-            <td class="t1-to">${ev.to ? 'to' : ''}</td>
+            
             <td class="t1-date">${formatShortDate(ev.to)}</td>
             <td class="t1-dur">${escapeHtml(ev.duration)}</td>
           </tr>

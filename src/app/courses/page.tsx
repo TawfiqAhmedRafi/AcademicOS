@@ -2,14 +2,18 @@ import clientPromise from "@/lib/mongodb";
 import CourseCatalog from "./CourseCatalog";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function CoursesPage() {
+  const session = await getServerSession(authOptions);
+  const isHead = session?.user?.role === "dept_head";
+
   const client = await clientPromise;
   const db = client.db("academicos");
-  
-  // Requirement 1: Fetch serially by semester FIRST, then by course code
+
   const courses = await db.collection("courses")
     .find({})
     .sort({ semester: 1, courseCode: 1 }) 
@@ -46,7 +50,7 @@ export default async function CoursesPage() {
             </p>
           </div>
           
-          <CourseCatalog initialCourses={serializedCourses} />
+          <CourseCatalog initialCourses={serializedCourses} isHead={isHead} />
         </div>
       </main>
       <Footer/>
