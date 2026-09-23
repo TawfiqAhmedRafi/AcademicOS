@@ -4,7 +4,7 @@ import { useState, Suspense, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { ArrowRight, UploadCloud, Lock, Mail, Loader2, Eye, EyeOff, CheckCircle2, User } from "lucide-react";
+import { ArrowRight, UploadCloud, Lock, Mail, Loader2, Eye, EyeOff, CheckCircle2, User, Info } from "lucide-react";
 
 function LoginForm() {
   const router = useRouter();
@@ -173,7 +173,17 @@ function LoginForm() {
 
           {step === "login" ? (
             <form onSubmit={handleLoginSubmit} className="flex flex-col gap-5">
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Institutional Login</h2>
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Institutional Login</h2>
+                
+                {/* Information Banner for First-Time Users */}
+                <div className="flex items-start gap-3 rounded-xl border border-ruet-blue/20 bg-ruet-blue/5 p-3.5 dark:border-ruet-gold/20 dark:bg-ruet-gold/5 mt-2">
+                  <Info className="mt-0.5 shrink-0 text-ruet-blue dark:text-ruet-gold" size={16} />
+                  <p className="text-xs leading-relaxed text-slate-700 dark:text-slate-300">
+                    <strong>First-time login?</strong> Use your full institutional email as your temporary password. You will be redirected to the secure setup flow immediately.
+                  </p>
+                </div>
+              </div>
               
               <div className="space-y-1">
                 <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Email Address</label>
