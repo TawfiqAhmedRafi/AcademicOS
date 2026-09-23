@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Loader2, UserMinus, GraduationCap, ArrowDownRight, XCircle } from "lucide-react";
+import { Search, Loader2, UserMinus, GraduationCap, ArrowDownRight, XCircle, Filter } from "lucide-react";
 import { useToast } from "@/app/components/ToastProvider";
+import DropdownFilter from "@/app/components/DropdownFilter";
 import Swal from "sweetalert2";
 
 type Student = {
@@ -17,6 +18,7 @@ export default function StudentManagementPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [seriesFilter, setSeriesFilter] = useState("all");
   
   // Modal State
   const [dropModal, setDropModal] = useState<Student | null>(null);
@@ -40,17 +42,17 @@ export default function StudentManagementPage() {
     e.preventDefault();
     if (!dropModal || !newSeries) return;
 
-const result = await Swal.fire({
-  title: "Transfer Student?",
-  text: `WARNING: You are transferring ${dropModal.name} from Series ${dropModal.series} to Series ${newSeries}. This will instantly move them to a new Advisor's roster. Proceed?`,
-  icon: "warning",
-  showCancelButton: true,
-  confirmButtonText: "Yes, transfer",
-  cancelButtonText: "Cancel",
-  reverseButtons: true,
-});
+    const result = await Swal.fire({
+      title: "Transfer Student?",
+      text: `WARNING: You are transferring ${dropModal.name} from Series ${dropModal.series} to Series ${newSeries}. This will instantly move them to a new Advisor's roster. Proceed?`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, transfer",
+      cancelButtonText: "Cancel",
+      reverseButtons: true,
+    });
 
-if (!result.isConfirmed) return;
+    if (!result.isConfirmed) return;
 
     setIsSubmitting(true);
     const res = await fetch("/api/head/students", {
@@ -75,11 +77,27 @@ if (!result.isConfirmed) return;
     setIsSubmitting(false);
   };
 
-  const filteredStudents = students.filter(s => 
-    s.name.toLowerCase().includes(search.toLowerCase()) || 
-    s.email.toLowerCase().includes(search.toLowerCase()) ||
-    s.series.includes(search)
-  );
+  // Dynamically extract all unique series from the students list
+  const uniqueSeries = Array.from(
+    new Set(students.map((s) => s.series).filter(Boolean))
+  ).sort((a, b) => Number(b) - Number(a));
+
+  const seriesOptions = [
+    { label: "All Series", value: "all" },
+    ...uniqueSeries.map((s) => ({ label: `Series ${s}`, value: s })),
+  ];
+
+  // Apply both the search query and the series filter
+  const filteredStudents = students.filter(s => {
+    const matchesSearch = 
+      s.name.toLowerCase().includes(search.toLowerCase()) || 
+      s.email.toLowerCase().includes(search.toLowerCase()) ||
+      s.series.includes(search);
+    
+    const matchesSeries = seriesFilter === "all" || s.series === seriesFilter;
+
+    return matchesSearch && matchesSeries;
+  });
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -88,15 +106,26 @@ if (!result.isConfirmed) return;
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Manage year drops, suspensions, and batch transfers.</p>
       </div>
 
-      <div className="mb-6 relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-        <input
-          type="text"
-          placeholder="Search by roll, name, or series..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-xl border border-slate-300 bg-white/50 py-2.5 pl-10 pr-4 text-sm focus:border-ruet-blue focus:outline-none dark:border-white/10 dark:bg-black/20 dark:text-white dark:focus:border-ruet-gold"
-        />
+      {/* Control Bar: Search & Series Filter */}
+      <div className="mb-6 flex flex-col sm:flex-row items-center gap-4">
+        <div className="relative w-full sm:max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input
+            type="text"
+            placeholder="Search by roll, name, or series..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-xl border border-slate-300 bg-white/50 py-2.5 pl-10 pr-4 text-sm focus:border-ruet-blue focus:outline-none dark:border-white/10 dark:bg-black/20 dark:text-white dark:focus:border-ruet-gold"
+          />
+        </div>
+        <div className="w-full sm:w-auto relative z-40">
+          <DropdownFilter
+            icon={<Filter size={16} />}
+            options={seriesOptions}
+            value={seriesFilter}
+            onChange={setSeriesFilter}
+          />
+        </div>
       </div>
 
       <div className="glass-panel overflow-hidden rounded-3xl">
@@ -119,31 +148,39 @@ if (!result.isConfirmed) return;
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                {filteredStudents.map(student => {
-                  const roll = student.studentId || student.email.split('@')[0];
-                  return (
-                    <tr key={student._id} className="transition-colors hover:bg-slate-50/50 dark:hover:bg-white/5">
-                      <td className="px-6 py-4 font-mono font-bold text-slate-900 dark:text-white">{roll}</td>
-                      <td className="px-6 py-4">
-                        <div className="font-bold text-slate-900 dark:text-white">{student.name}</div>
-                        <div className="text-xs text-slate-500 mt-0.5">{student.email}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-300 px-3 py-1 rounded-full text-xs font-bold">
-                          Series {student.series}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <button 
-                          onClick={() => setDropModal(student)}
-                          className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 transition-colors"
-                        >
-                          <ArrowDownRight size={14} /> Process Year Drop
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {filteredStudents.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-8 text-center text-slate-500">
+                      No students found matching the selected criteria.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredStudents.map(student => {
+                    const roll = student.studentId || student.email.split('@')[0];
+                    return (
+                      <tr key={student._id} className="transition-colors hover:bg-slate-50/50 dark:hover:bg-white/5">
+                        <td className="px-6 py-4 font-mono font-bold text-slate-900 dark:text-white">{roll}</td>
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-slate-900 dark:text-white">{student.name}</div>
+                          <div className="text-xs text-slate-500 mt-0.5">{student.email}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-300 px-3 py-1 rounded-full text-xs font-bold">
+                            Series {student.series}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button 
+                            onClick={() => setDropModal(student)}
+                            className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 transition-colors"
+                          >
+                            <ArrowDownRight size={14} /> Process Year Drop
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>

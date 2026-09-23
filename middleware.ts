@@ -6,16 +6,23 @@ export default withAuth(
     const token = req.nextauth.token;
     const path = req.nextUrl.pathname;
     const role = token?.role as string; // 'student', 'faculty', 'dept_head', 'admin', 'advisor'
+    const isAdmin = token?.isAdmin as boolean;
 
     // Define protected path prefixes for each role tier
-    const studentRoutes = ["/dashboard/registration", "/dashboard/form-fillup", "/dashboard/results"];
+    const studentRoutes = ["/dashboard/registration", "/dashboard/form-fillup", "/dashboard/results", "/dashboard/backlog-registration", "/dashboard/calendar", "/dashboard/routine"];
     const facultyRoutes = ["/dashboard/classes", "/dashboard/marks", "/dashboard/similarity"];
-    const advisorRoutes = ["/dashboard/roster", "/dashboard/approvals"];
-    const headRoutes = ["/dashboard/series-manager", "/dashboard/analytics"];
-    const adminRoutes = ["/dashboard/faculty-mgmt"];
+    const advisorRoutes = ["/dashboard/roster", "/dashboard/approvals", "/dashboard/calendar-builder", "/dashboard/tabulation"];
+    const headRoutes = ["/dashboard/series-manager", "/dashboard/student-mgmt", "/dashboard/head-results", "/dashboard/routine-builder"];
+    const adminRoutes = ["/dashboard/faculty-mgmt", "/dashboard/user-mgmt", "/dashboard/logs"];
+
+    // 0. Super-Admin Bypass
+    // If the user is an admin or has the isAdmin flag, grant them unrestricted access
+    if (role === "admin" || isAdmin) {
+      return;
+    }
 
     // 1. Admin Protections
-    if (adminRoutes.some(r => path.startsWith(r)) && role !== "admin") {
+    if (adminRoutes.some(r => path.startsWith(r)) && role !== "admin" && !isAdmin) {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
 
