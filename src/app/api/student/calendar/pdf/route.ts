@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
 
     const pdf = await generateCalendarPdf(calendar, seriesConfig, head);
 
-    return new NextResponse(pdf, {
+    return new NextResponse(pdf as any, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",

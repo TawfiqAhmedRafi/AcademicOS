@@ -21,6 +21,7 @@ export async function POST() {
       { $set: { resetOtp: otp, resetOtpExpiry: new Date(Date.now() + 10 * 60 * 1000) } }
     );
 
+    if (!session?.user?.email) return NextResponse.json({ error: "Email missing" }, { status: 400 });
     // Send it using existing Nodemailer transporter
     await sendOTP(session.user.email, otp);
 

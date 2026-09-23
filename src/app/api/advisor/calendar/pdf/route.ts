@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     const head = await db.collection("users").findOne({ role: "dept_head" });
     const pdf = await generateCalendarPdf(calendar, seriesConfig, head);
 
-    return new NextResponse(pdf, {
+    return new NextResponse(pdf as any, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",

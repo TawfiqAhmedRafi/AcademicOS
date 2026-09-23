@@ -7,7 +7,7 @@ import { logSystemAction } from "@/lib/logger";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!["faculty", "advisor", "dept_head"].includes(session?.user?.role || "")) {
+  if (!session?.user || !["faculty", "advisor", "dept_head"].includes(session.user.role || "")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 

@@ -203,7 +203,7 @@ export async function generateCalendarPdf(calendar: any, seriesConfig: any, head
       channel: "chrome" 
     });
   } else {
-    const chromium = (await import("@sparticuz/chromium")).default;
+    const chromium = (await import("@sparticuz/chromium")).default as any;
     const puppeteerCore = (await import("puppeteer-core")).default;
     browser = await puppeteerCore.launch({
       args: chromium.args,
@@ -219,7 +219,7 @@ export async function generateCalendarPdf(calendar: any, seriesConfig: any, head
     // maps to the true printed page height, keeping the signature
     // block correctly pinned to the bottom of the page.
     await page.setViewport({ width: 794, height: 1123 });
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.setContent(html, { waitUntil: "networkidle0" as any });
     const pdfBytes = await page.pdf({
       format: "A4",
       landscape: false,
