@@ -9,8 +9,25 @@ import { ArrowRight, UploadCloud, Lock, Mail, Loader2, Eye, EyeOff, CheckCircle2
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/";
+  const rawCallbackUrl = searchParams.get("callbackUrl") || "/";
   const urlError = searchParams.get("error");
+
+  // Sanitize callbackUrl to always stay within relative paths on current origin
+  let callbackUrl = "/";
+  try {
+    if (rawCallbackUrl.startsWith("/")) {
+      callbackUrl = rawCallbackUrl;
+    } else {
+      const parsed = new URL(rawCallbackUrl);
+      callbackUrl = parsed.pathname + parsed.search;
+    }
+  } catch {
+    callbackUrl = "/";
+  }
+
+  if (!callbackUrl || callbackUrl === "/login" || callbackUrl.startsWith("/login?")) {
+    callbackUrl = "/";
+  }
 
   const [step, setStep] = useState<"login" | "setup">("login");
   
