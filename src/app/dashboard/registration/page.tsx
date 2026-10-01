@@ -1,16 +1,27 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Loader2, Lock, CheckCircle2, Clock, BookOpen, AlertCircle, Send } from "lucide-react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { Loader2, Lock, CheckCircle2, Clock, BookOpen, AlertCircle, CreditCard, XCircle, RefreshCcw } from "lucide-react";
 import { useToast } from "@/app/components/ToastProvider";
 import Swal from "sweetalert2";
 
 export default function StudentRegistrationPage() {
+  return (
+    <Suspense fallback={<div className="flex h-[60vh] items-center justify-center"><Loader2 className="animate-spin text-ruet-blue dark:text-ruet-gold" size={32} /></div>}>
+      <RegistrationContent />
+    </Suspense>
+  );
+}
+
+function RegistrationContent() {
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedElectives, setSelectedElectives] = useState<Set<string>>(new Set());
   const { showToast } = useToast();
+  const searchParams = useSearchParams();
+  const paymentStatus = searchParams.get("payment");
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -21,6 +32,19 @@ export default function StudentRegistrationPage() {
 
   useEffect(() => { fetchData(); }, []);
 
+  // Show toast based on payment result from URL params
+  useEffect(() => {
+    if (paymentStatus === "success") {
+      showToast("Payment successful! Your registration has been submitted to your advisor.", "success");
+      // Clean the URL without reloading
+      window.history.replaceState({}, "", "/dashboard/registration");
+    } else if (paymentStatus === "failed") {
+      showToast("Payment failed. Please try again.", "error");
+    } else if (paymentStatus === "cancelled") {
+      showToast("Payment was cancelled. You can try again when ready.", "error");
+    }
+  }, [paymentStatus]);
+
   const handleToggleElective = (courseId: string) => {
     const newSet = new Set(selectedElectives);
     if (newSet.has(courseId)) newSet.delete(courseId);
@@ -28,35 +52,56 @@ export default function StudentRegistrationPage() {
     setSelectedElectives(newSet);
   };
 
-  const handleSubmit = async () => {
+  const handleProceedToPayment = async () => {
+    const mandatoryIds = data.courses.filter((c: any) => !c.isElective).map((c: any) => c._id);
+    const finalSelection = [...mandatoryIds, ...Array.from(selectedElectives)];
+
+    // Calculate total credits for confirmation dialog
+    const selectedCourses = data.courses.filter((c: any) => finalSelection.includes(c._id));
+    const totalCredits = selectedCourses.reduce((sum: number, c: any) => sum + (c.credits || 0), 0);
+    const amount = (totalCredits * 20).toFixed(2);
+
     const result = await Swal.fire({
-      title: "Are you sure?",
-      text: "Are you sure you want to submit your course list? You will not be able to edit it once submitted.",
-      icon: "warning",
+      title: "Proceed to Payment?",
+      html: `
+        <div style="text-align: left; font-size: 14px; line-height: 1.8;">
+          <p><strong>Total Credits:</strong> ${totalCredits.toFixed(2)}</p>
+          <p><strong>Fee:</strong> ৳${amount} <span style="color: #888;">(${totalCredits.toFixed(2)} credits × ৳20)</span></p>
+          <hr style="margin: 12px 0; border-color: #eee;">
+          <p style="color: #666;">You will be redirected to the SSLCommerz payment gateway. Your registration will only be submitted to your advisor after a successful payment.</p>
+        </div>
+      `,
+      icon: "info",
       showCancelButton: true,
-      confirmButtonText: "Yes, Submit",
+      confirmButtonText: "Pay Now",
       cancelButtonText: "Cancel",
+      confirmButtonColor: "#002B49",
       reverseButtons: true,
     });
     if (!result.isConfirmed) return;
 
     setIsSubmitting(true);
-    const mandatoryIds = data.courses.filter((c: any) => !c.isElective).map((c: any) => c._id);
-    const finalSelection = [...mandatoryIds, ...Array.from(selectedElectives)];
 
-    const res = await fetch("/api/student/registration", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ selectedCourseIds: finalSelection })
-    });
+    try {
+      const res = await fetch("/api/payment/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectedCourseIds: finalSelection }),
+      });
 
-    if (res.ok) {
-      showToast("Registration submitted successfully", "success");
-      fetchData(); 
-    } else {
-      showToast("Failed to submit registration", "error");
+      const responseData = await res.json();
+
+      if (res.ok && responseData.GatewayPageURL) {
+        // Redirect to SSLCommerz payment gateway
+        window.location.href = responseData.GatewayPageURL;
+      } else {
+        showToast(responseData.error || "Failed to initiate payment", "error");
+        setIsSubmitting(false);
+      }
+    } catch (error) {
+      showToast("Something went wrong. Please try again.", "error");
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   if (isLoading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="animate-spin text-ruet-blue dark:text-ruet-gold" size={32} /></div>;
@@ -90,6 +135,37 @@ export default function StudentRegistrationPage() {
         </p>
       </div>
 
+      {/* --- Payment Failure / Cancellation Banner --- */}
+      {(paymentStatus === "failed" || paymentStatus === "cancelled") && status === "unregistered" && (
+        <div className={`mb-6 flex items-center gap-3 p-4 rounded-xl border ${
+          paymentStatus === "failed" 
+            ? "bg-red-50/80 border-red-200 dark:bg-red-500/10 dark:border-red-500/30" 
+            : "bg-amber-50/80 border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/30"
+        }`}>
+          {paymentStatus === "failed" 
+            ? <XCircle className="text-red-500 shrink-0" size={22} /> 
+            : <AlertCircle className="text-amber-500 shrink-0" size={22} />
+          }
+          <div className="flex-1">
+            <p className={`text-sm font-bold ${paymentStatus === "failed" ? "text-red-800 dark:text-red-300" : "text-amber-800 dark:text-amber-300"}`}>
+              {paymentStatus === "failed" 
+                ? "Payment Failed — Your transaction could not be completed." 
+                : "Payment Cancelled — You cancelled the payment process."
+              }
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Your course selection is still intact. You can try the payment again below.
+            </p>
+          </div>
+          <button 
+            onClick={() => window.history.replaceState({}, "", "/dashboard/registration")} 
+            className="shrink-0 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white transition-colors"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {isCompleted ? (
         <div className="glass-panel p-8 rounded-3xl text-center border-emerald-200 dark:border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-500/5 mb-8">
           <CheckCircle2 className="h-16 w-16 text-emerald-500 mx-auto mb-4" />
@@ -106,7 +182,7 @@ export default function StudentRegistrationPage() {
               {status === "approved" ? "Registration Approved" : "Pending Advisor Approval"}
             </h2>
             <p className="text-slate-600 dark:text-slate-400">
-              {status === "approved" ? "Your course advisor has formally approved your course list for this semester." : "You have successfully submitted your course list. It is currently locked while waiting for your Course Advisor's review."}
+              {status === "approved" ? "Your course advisor has formally approved your course list for this semester." : "Payment was successful and your course list has been submitted. It is currently locked while waiting for your Course Advisor's review."}
             </p>
           </div>
 
@@ -204,9 +280,10 @@ export default function StudentRegistrationPage() {
               <div>
                 <p className="text-slate-400 text-sm font-medium uppercase tracking-wider mb-1">Total Registered Credits</p>
                 <p className="text-4xl font-black">{totalCredits.toFixed(2)} <span className="text-lg text-slate-500 font-normal">Cr</span></p>
+                <p className="text-sm text-slate-400 mt-1">Fee: ৳{(totalCredits * 20).toFixed(2)} <span className="text-xs">({totalCredits.toFixed(2)} × ৳20)</span></p>
               </div>
-              <button onClick={handleSubmit} disabled={isSubmitting} className="w-full sm:w-auto px-8 py-4 bg-ruet-blue hover:bg-blue-800 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-70 shadow-xl">
-                {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />} Submit to Advisor
+              <button onClick={handleProceedToPayment} disabled={isSubmitting} className="w-full sm:w-auto px-8 py-4 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 text-white dark:text-black font-bold rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-70 shadow-xl">
+                {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <CreditCard size={20} />} Proceed to Payment
               </button>
             </div>
           </div>
