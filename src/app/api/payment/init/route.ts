@@ -47,8 +47,8 @@ export async function POST(req: Request) {
 
     // Fetch the selected courses to calculate total credits
     const courseObjectIds = selectedCourseIds.map((id: string) => {
-      try { return new ObjectId(id); } catch { return id; }
-    });
+      try { return new ObjectId(id); } catch { return null; }
+    }).filter(Boolean) as ObjectId[];
 
     const courses = await db.collection("courses").find({
       _id: { $in: courseObjectIds }

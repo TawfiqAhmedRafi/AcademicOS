@@ -46,7 +46,7 @@ export async function POST(req: Request) {
         const registeredCourses = user.registeredCourses || [];
         const courseObjectIds = registeredCourses.map((id: string) => {
           try { return new ObjectId(id); } catch { return null; }
-        }).filter(Boolean);
+        }).filter(Boolean) as ObjectId[];
 
         const courses = await db.collection("courses").find({ _id: { $in: courseObjectIds } }).toArray();
         const totalCredits = courses.reduce((sum: number, c: any) => sum + (c.credits || 0), 0);
