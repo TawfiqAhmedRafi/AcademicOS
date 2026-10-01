@@ -1,16 +1,27 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Loader2, Lock, CheckCircle2, Clock, AlertCircle, Send, FileText, BookOpen } from "lucide-react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { Loader2, Lock, CheckCircle2, Clock, AlertCircle, CreditCard, FileText, BookOpen, XCircle } from "lucide-react";
 import { useToast } from "@/app/components/ToastProvider";
 import Link from "next/link";
 import Swal from "sweetalert2";
 
 export default function StudentFormFillupPage() {
+  return (
+    <Suspense fallback={<div className="flex h-[60vh] items-center justify-center"><Loader2 className="animate-spin text-ruet-blue dark:text-ruet-gold" size={32} /></div>}>
+      <FormFillupContent />
+    </Suspense>
+  );
+}
+
+function FormFillupContent() {
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { showToast } = useToast();
+  const searchParams = useSearchParams();
+  const paymentStatus = searchParams.get("payment");
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -21,31 +32,61 @@ export default function StudentFormFillupPage() {
 
   useEffect(() => { fetchData(); }, []);
 
-  const handleSubmit = async () => {
+  // Show toast based on payment result from URL params
+  useEffect(() => {
+    if (paymentStatus === "success") {
+      showToast("Payment successful! Your form fill-up has been submitted to your advisor.", "success");
+      window.history.replaceState({}, "", "/dashboard/form-fillup");
+    } else if (paymentStatus === "failed") {
+      showToast("Payment failed. Please try again.", "error");
+    } else if (paymentStatus === "cancelled") {
+      showToast("Payment was cancelled. You can try again when ready.", "error");
+    }
+  }, [paymentStatus]);
+
+  const handleProceedToPayment = async () => {
+    const totalCredits = data.courses.reduce((sum: number, c: any) => sum + (c.credits || 0), 0);
+    const amount = (totalCredits * 20).toFixed(2);
+
     const result = await Swal.fire({
-      title: "Are you sure?",
-      text: "Are you sure you want to submit your Exam Form Fill-up?",
-      icon: "warning",
+      title: "Proceed to Payment?",
+      html: `
+        <div style="text-align: left; font-size: 14px; line-height: 1.8;">
+          <p><strong>Total Credits:</strong> ${totalCredits.toFixed(2)}</p>
+          <p><strong>Fee:</strong> ৳${amount} <span style="color: #888;">(${totalCredits.toFixed(2)} credits × ৳20)</span></p>
+          <hr style="margin: 12px 0; border-color: #eee;">
+          <p style="color: #666;">You will be redirected to the SSLCommerz payment gateway. Your form fill-up will only be submitted to your advisor after a successful payment.</p>
+        </div>
+      `,
+      icon: "info",
       showCancelButton: true,
-      confirmButtonText: "Yes, Submit",
+      confirmButtonText: "Pay Now",
       cancelButtonText: "Cancel",
+      confirmButtonColor: "#002B49",
       reverseButtons: true,
     });
     if (!result.isConfirmed) return;
 
     setIsSubmitting(true);
-    const res = await fetch("/api/student/form-fillup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
 
-    if (res.ok) {
-      showToast("Form Fill-up submitted successfully", "success");
-      fetchData(); 
-    } else {
-      showToast("Failed to submit Form Fill-up", "error");
+    try {
+      const res = await fetch("/api/payment/form-fillup/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      const responseData = await res.json();
+
+      if (res.ok && responseData.GatewayPageURL) {
+        window.location.href = responseData.GatewayPageURL;
+      } else {
+        showToast(responseData.error || "Failed to initiate payment", "error");
+        setIsSubmitting(false);
+      }
+    } catch (error) {
+      showToast("Something went wrong. Please try again.", "error");
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   if (isLoading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="animate-spin text-ruet-blue dark:text-ruet-gold" size={32} /></div>;
@@ -67,6 +108,37 @@ export default function StudentFormFillupPage() {
           Semester {seriesConfig?.currentSemester} | Series {seriesConfig?.series}
         </p>
       </div>
+
+      {/* --- Payment Failure / Cancellation Banner --- */}
+      {(paymentStatus === "failed" || paymentStatus === "cancelled") && formFillupStatus === "unregistered" && (
+        <div className={`mb-6 flex items-center gap-3 p-4 rounded-xl border ${
+          paymentStatus === "failed" 
+            ? "bg-red-50/80 border-red-200 dark:bg-red-500/10 dark:border-red-500/30" 
+            : "bg-amber-50/80 border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/30"
+        }`}>
+          {paymentStatus === "failed" 
+            ? <XCircle className="text-red-500 shrink-0" size={22} /> 
+            : <AlertCircle className="text-amber-500 shrink-0" size={22} />
+          }
+          <div className="flex-1">
+            <p className={`text-sm font-bold ${paymentStatus === "failed" ? "text-red-800 dark:text-red-300" : "text-amber-800 dark:text-amber-300"}`}>
+              {paymentStatus === "failed" 
+                ? "Payment Failed — Your transaction could not be completed." 
+                : "Payment Cancelled — You cancelled the payment process."
+              }
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              You can try the payment again below.
+            </p>
+          </div>
+          <button 
+            onClick={() => window.history.replaceState({}, "", "/dashboard/form-fillup")} 
+            className="shrink-0 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white transition-colors"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {isCompleted ? (
         <div className="glass-panel p-8 rounded-3xl text-center border-emerald-200 dark:border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-500/5 mb-8">
@@ -95,7 +167,7 @@ export default function StudentFormFillupPage() {
                {formFillupStatus === "approved" ? "Form Fill-up Approved" : "Pending Advisor Approval"}
              </h2>
              <p className="text-slate-600 dark:text-slate-400">
-               {formFillupStatus === "approved" ? "Your Exam Form Fill-up has been formally approved." : "You have successfully submitted your Form Fill-up request. It is currently waiting for your Course Advisor's review."}
+               {formFillupStatus === "approved" ? "Your Exam Form Fill-up has been formally approved." : "Payment was successful and your Form Fill-up request has been submitted. It is currently waiting for your Course Advisor's review."}
              </p>
            </div>
 
@@ -161,9 +233,10 @@ export default function StudentFormFillupPage() {
               <div>
                 <p className="text-slate-400 text-sm font-medium uppercase tracking-wider mb-1">Total Exam Credits</p>
                 <p className="text-4xl font-black">{totalCredits.toFixed(2)} <span className="text-lg text-slate-500 font-normal">Cr</span></p>
+                <p className="text-sm text-slate-400 mt-1">Fee: ৳{(totalCredits * 20).toFixed(2)} <span className="text-xs">({totalCredits.toFixed(2)} × ৳20)</span></p>
               </div>
-              <button onClick={handleSubmit} disabled={isSubmitting || courses.length === 0} className="w-full sm:w-auto px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-70 shadow-xl">
-                {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />} Submit Exam Form
+              <button onClick={handleProceedToPayment} disabled={isSubmitting || courses.length === 0} className="w-full sm:w-auto px-8 py-4 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 text-white dark:text-black font-bold rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-70 shadow-xl">
+                {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <CreditCard size={20} />} Proceed to Payment
               </button>
             </div>
           </div>
