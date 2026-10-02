@@ -6,7 +6,7 @@ import Footer from "../components/Footer";
 import { Loader2, Megaphone, Bell, ShieldAlert, X, Send, Trash2, Globe, Search } from "lucide-react";
 import { useSession } from "next-auth/react";
 import DropdownFilter from "../components/DropdownFilter";
-import { useToast } from "../../components/ToastProvider";
+import { useToast } from "@/app/components/ToastProvider";
 import Swal from "sweetalert2";
 
 export default function NoticeBoardPage() {
