@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Calculator, Send, AlertCircle, CheckCircle2, Lock, FileText, Download, ShieldAlert } from "lucide-react";
-import { useToast } from "@/app/components/ToastProvider";
+import { useToast } from "../../components/ToastProvider";
 import Swal from "sweetalert2";
 
 export default function TabulationEnginePage() {

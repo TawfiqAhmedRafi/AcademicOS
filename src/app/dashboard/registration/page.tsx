@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2, Lock, CheckCircle2, Clock, BookOpen, AlertCircle, CreditCard, XCircle, RefreshCcw } from "lucide-react";
-import { useToast } from "@/app/components/ToastProvider";
+import { useToast } from "../../components/ToastProvider";
 import Swal from "sweetalert2";
 
 export default function StudentRegistrationPage() {

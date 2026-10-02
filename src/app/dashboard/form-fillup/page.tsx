@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2, Lock, CheckCircle2, Clock, AlertCircle, CreditCard, FileText, BookOpen, XCircle } from "lucide-react";
-import { useToast } from "@/app/components/ToastProvider";
+import { useToast } from "../../components/ToastProvider";
 import Link from "next/link";
 import Swal from "sweetalert2";
 

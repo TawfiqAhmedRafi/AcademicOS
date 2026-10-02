@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { Search, Loader2, UserMinus, GraduationCap, ArrowDownRight, XCircle } from "lucide-react";
-import { useToast } from "@/app/components/ToastProvider";
-import Pagination from "@/app/components/Pagination";
+import { useToast } from "../../components/ToastProvider";
+import Pagination from "../../components/Pagination";
 import Swal from "sweetalert2";
 
 type Student = {

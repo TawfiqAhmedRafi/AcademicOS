@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { Loader2, Camera, KeyRound, Mail, CheckCircle2, ShieldCheck } from "lucide-react";
-import { useToast } from "@/app/components/ToastProvider";
+import { useToast } from "../../components/ToastProvider";
 import Image from "next/image";
 
 export default function SettingsPage() {

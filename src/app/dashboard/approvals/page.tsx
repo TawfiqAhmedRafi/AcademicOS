@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, CheckCircle2, XCircle, Search, Inbox, ArrowRight } from "lucide-react";
-import { useToast } from "@/app/components/ToastProvider";
+import { useToast } from "../../components/ToastProvider";
 
 export default function PendingApprovalsPage() {
   const [students, setStudents] = useState<any[]>([]);

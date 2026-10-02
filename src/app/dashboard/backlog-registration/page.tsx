@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Lock, CheckCircle2, Clock, AlertCircle, Send, ShieldAlert } from "lucide-react";
-import { useToast } from "@/app/components/ToastProvider";
+import { useToast } from "../../components/ToastProvider";
 import Swal from "sweetalert2";
 
 export default function BacklogRegistrationPage() {

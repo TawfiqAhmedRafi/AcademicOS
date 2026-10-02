@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ShieldCheck, Activity, KeyRound, Server, Loader2, Database } from "lucide-react";
-import Pagination from "@/app/components/Pagination";
+import Pagination from "../../components/Pagination";
 
 type Log = {
   _id: string;

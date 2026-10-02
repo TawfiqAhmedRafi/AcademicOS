@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { Search, BookOpen, X, Clock, CheckCircle2, Filter, Layers, FolderDot, Plus, Edit, Trash2, Loader2, Save } from "lucide-react";
 import DropdownFilter from "../components/DropdownFilter";
-import { useToast } from "@/app/components/ToastProvider";
+import { useToast } from "../components/ToastProvider";
 import Swal from "sweetalert2";
 
 type Course = {
