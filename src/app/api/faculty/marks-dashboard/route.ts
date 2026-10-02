@@ -122,12 +122,12 @@ export async function GET() {
       const allBacklogRefs = Array.from(new Set(backlogStudents.flatMap(s => s.registeredBacklogs || [])));
       const backlogCourseDocs = await db.collection("courses").find({
         $or: [
-          { _id: { $in: allBacklogRefs.map(id => { try { return new ObjectId(id); } catch(e){ return null; } }).filter(Boolean) } },
+          { _id: { $in: allBacklogRefs.map(id => { try { return new ObjectId(id); } catch(e){ return null; } }).filter((id): id is ObjectId => id !== null) } },
           { courseCode: { $in: allBacklogRefs } }
         ]
       }).toArray();
 
-      const studentsWithBacklogCodes = backlogStudents.map(s => {
+      const studentsWithBacklogCodes = (backlogStudents as any[]).map(s => {
         const codes = (s.registeredBacklogs || []).map((ref: string) => {
             const doc = backlogCourseDocs.find(c => c._id.toString() === ref || c.courseCode === ref);
             return doc ? doc.courseCode : null;
@@ -253,7 +253,7 @@ export async function PATCH(req: Request) {
                   );
 
                   // Fork: Create a dedicated clone strictly for this teacher
-                  const clonedSlot = { ...slot };
+                  const clonedSlot: any = { ...slot };
                   delete clonedSlot._id; 
                   clonedSlot.teachers = [initials];
                   clonedSlot.courseCode = targetCourseDoc.courseCode;

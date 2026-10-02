@@ -285,7 +285,7 @@ function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, 
   });
 
   const isSplit = form.courseCode.includes('/');
-  const splitCourses = isSplit ? form.courseCode.split('/').map(c => c.trim()).filter(Boolean) : [];
+  const splitCourses = isSplit ? form.courseCode.split('/').map((c: string) => c.trim()).filter(Boolean) : [];
 
   // Calculate Busy Status for Collision Detection
   const { busyRooms, busyTeachers } = useMemo(() => {
@@ -353,7 +353,7 @@ function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, 
     if (busyTeachers.has(t)) return;
     const newT = [...form.splitTeachers];
     if (!newT[index]) newT[index] = [];
-    if (newT[index].includes(t)) newT[index] = newT[index].filter(x => x !== t);
+    if (newT[index].includes(t)) newT[index] = newT[index].filter((x: string) => x !== t);
     else newT[index].push(t);
     setForm({ ...form, splitTeachers: newT });
   };
@@ -428,7 +428,7 @@ function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, 
                 </p>
               </div>
               
-              {splitCourses.map((sc, idx) => (
+              {splitCourses.map((sc: string, idx: number) => (
                 <div key={idx} className="bg-slate-50 dark:bg-white/5 p-4 rounded-xl border border-slate-200 dark:border-white/10 space-y-4">
                   <h4 className="font-black text-sm text-ruet-blue dark:text-ruet-gold tracking-tight">{sc}</h4>
                   
@@ -438,7 +438,7 @@ function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, 
                     <div className="flex flex-wrap gap-2">
                       {ROOMS.map(r => {
                         const isBusy = busyRooms.has(r);
-                        const isSelectedElsewhere = form.splitRooms.some((sr, i) => i !== idx && sr === r);
+                        const isSelectedElsewhere = form.splitRooms.some((sr: string, i: number) => i !== idx && sr === r);
                         const isSelected = form.splitRooms[idx] === r;
                         const disabled = isBusy || isSelectedElsewhere;
                         
@@ -465,7 +465,7 @@ function SlotEditorModal({ modal, allMasterSlots, allTeachers, onClose, onSave, 
                         const initInitials = t.initials;
                         if(!initInitials) return null;
                         const isBusy = busyTeachers.has(initInitials);
-                        const isSelectedElsewhere = form.splitTeachers.some((st, i) => i !== idx && st.includes(initInitials));
+                        const isSelectedElsewhere = form.splitTeachers.some((st: string[], i: number) => i !== idx && st.includes(initInitials));
                         const isSelected = form.splitTeachers[idx]?.includes(initInitials);
                         const disabled = isBusy || isSelectedElsewhere;
                         

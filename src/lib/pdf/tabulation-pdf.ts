@@ -82,7 +82,7 @@ export async function generateTabulationPdf(draft: any): Promise<Buffer> {
       channel: "chrome" 
     });
   } else {
-    const chromium = (await import("@sparticuz/chromium")).default;
+    const chromium = (await import("@sparticuz/chromium")).default as any;
     const puppeteerCore = (await import("puppeteer-core")).default;
     browser = await puppeteerCore.launch({
       args: chromium.args,
@@ -94,7 +94,7 @@ export async function generateTabulationPdf(draft: any): Promise<Buffer> {
 
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.setContent(html, { waitUntil: "networkidle0" as any });
     
     const pdfBytes = await page.pdf({
       format: "A4",

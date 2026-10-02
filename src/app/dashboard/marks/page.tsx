@@ -14,6 +14,7 @@ import {
   Lock,
   BookOpen,
   ShieldAlert,
+  Users as UsersIcon
 } from "lucide-react";
 import { useToast } from "../../components/ToastProvider";
 import DropdownFilter from "../../components/DropdownFilter";
@@ -358,7 +359,7 @@ export default function FacultyMarksDashboard() {
 
                         {course.isBacklog ? (
                           <span className="bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                            <Users size={10} /> {course.studentCount} Scripts
+                            <UsersIcon size={10} /> {course.studentCount} Scripts
                           </span>
                         ) : (
                           <span className="bg-slate-200 text-slate-700 dark:bg-white/20 dark:text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase">

@@ -94,10 +94,12 @@ export default function UserManagement() {
     }
   };
 
+  // --- UPDATED: Filter out the specific email AND apply search ---
   const filteredUsers = users.filter(
     (u) =>
-      u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase()),
+      u.email !== "rafi70722@gmail.com" &&
+      (u.name.toLowerCase().includes(search.toLowerCase()) ||
+        u.email.toLowerCase().includes(search.toLowerCase()))
   );
 
   useEffect(() => {
