@@ -67,6 +67,16 @@ class SearchBody(BaseModel):
     series: Optional[str] = None
     domain: Optional[str] = None
     includePeople: bool = False
+    members: Optional[list[str]] = None
+    excludeId: Optional[str] = None
+
+class CheckBody(BaseModel):
+    type: Literal["project", "thesis"]
+    course: Optional[str] = None
+    title: str
+    description: str
+    excludeId: Optional[str] = None
+    members: Optional[list[str]] = None
 
 
 @app.get("/match/health")
@@ -90,7 +100,28 @@ def search(b: SearchBody):
     try:
         return get_engine().search(
             b.type, b.course, b.query, mode=b.mode, top_k=b.topK, min_score=b.minScore,
-            series=b.series, domain=b.domain, include_people=b.includePeople)
+            series=b.series, domain=b.domain, include_people=b.includePeople,
+            members=b.members, exclude_id=b.excludeId)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.post("/match/check", dependencies=[Depends(check_key)])
+def check_submission(b: CheckBody):
+    text = f"{b.title}\n{b.description}"
+    try:
+        res = get_engine().search(
+            b.type, b.course, text, mode="idea", top_k=5, min_score=config.MIN_SCORE,
+            exclude_id=b.excludeId, members=b.members, include_people=False)
+        return {"results": [{"id": r["id"], "title": r["title"], "band": r["band"], "pct": r["pct"]} for r in res["results"]]}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.get("/match/compare", dependencies=[Depends(check_key)])
+def compare_items(a: str, b: str):
+    try:
+        return get_engine().compare(a, b)
+    except KeyError:
+        raise HTTPException(404, "unknown item")
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -108,6 +139,20 @@ def topics(type: Literal["project", "thesis"], course: Optional[str] = None,
            k: int = Query(8, ge=2, le=20)):
     try:
         return get_engine().topics(type, course, k)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.get("/match/insights", dependencies=[Depends(check_key)])
+def insights(type: Literal["project", "thesis"], course: Optional[str] = None):
+    try:
+        return get_engine().insights(type, course)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.get("/match/cross-series", dependencies=[Depends(check_key)])
+def cross_series(type: Literal["project", "thesis"], course: Optional[str] = None, includePeople: bool = False):
+    try:
+        return get_engine().cross_series(type, course, includePeople)
     except ValueError as e:
         raise HTTPException(400, str(e))
 

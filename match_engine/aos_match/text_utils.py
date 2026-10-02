@@ -165,13 +165,46 @@ DOMAIN_STOPWORDS = {
 KEEP_WORDS = {"fire", "call", "move", "find", "top", "front", "back", "bottom", "part",
               "full", "side", "show", "fill", "empty", "thick", "thin", "mill", "bill",
               "detail", "interest", "found", "amount", "system"}  # 'system' re-added to DOMAIN below
-STOPWORDS = (frozenset(ENGLISH_STOP_WORDS) - KEEP_WORDS) | DOMAIN_STOPWORDS
+STOPWORDS = set((frozenset(ENGLISH_STOP_WORDS) - KEEP_WORDS) | DOMAIN_STOPWORDS)
+
+def configure_vocab(extra: dict[str, list[tuple[str, str]] | set[str]]) -> None:
+    """Merge dynamic vocab from the database into the built-in lists."""
+    global _PHRASES, WORD_SYNONYMS, STOPWORDS
+    
+    if "stopword" in extra:
+        STOPWORDS.update(extra["stopword"])
+        
+    if "phrase" in extra:
+        new_phrases = [(p_from, p_to) for p_from, p_to in extra["phrase"]]
+        PHRASES[:0] = new_phrases
+        _PHRASES.clear()
+        _PHRASES.extend([(re.compile(p), r) for p, r in PHRASES])
+        
+    if "synonym" in extra:
+        for w_from, w_to in extra["synonym"]:
+            WORD_SYNONYMS[w_from] = w_to
 
 _TOKEN = re.compile(r"[a-z][a-z0-9]*|\d+[a-z][a-z0-9]*")  # drops bare numbers
 
 
+import json
+from pathlib import Path
+
+_BANGLISH = {}
+try:
+    _b_path = Path(__file__).parent.parent / "data" / "banglish.json"
+    if _b_path.exists():
+        _BANGLISH = json.loads(_b_path.read_text(encoding="utf-8"))
+except Exception:
+    pass
+
+def has_bangla_script(text: str) -> bool:
+    return bool(re.search(r"[\u0980-\u09FF]", text))
+
 def _normalise_unicode(text: str) -> str:
     text = unicodedata.normalize("NFKC", text)
+    # Bangla digit to English
+    text = text.translate(str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789"))
     return (text.replace("\u2013", "-").replace("\u2014", "-")
                 .replace("\u2018", "'").replace("\u2019", "'"))
 
@@ -196,6 +229,7 @@ def tokenize(text: str, keep_stopwords: bool = False) -> list[str]:
         t = pat.sub(repl, t)
     out = []
     for tok in _TOKEN.findall(t):
+        tok = _BANGLISH.get(tok, tok)
         tok = WORD_SYNONYMS.get(tok, tok)
         if not keep_stopwords and (tok in STOPWORDS or len(tok) < 2):
             continue

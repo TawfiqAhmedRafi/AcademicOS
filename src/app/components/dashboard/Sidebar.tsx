@@ -60,6 +60,9 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
 
   const adminLinks = [
     { name: "System Overview", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Match Vocabulary", href: "/dashboard/match-vocab", icon: BookOpen },
+    { name: "Match Analysis", href: "/dashboard/match-analysis", icon: Database },
+    { name: "Match Telemetry", href: "/dashboard/match-insights", icon: FileText },
     { name: "Faculty Management", href: "/dashboard/faculty-mgmt", icon: UserCog },
     { name: "User Management", href: "/dashboard/user-mgmt", icon: ShieldAlert },
     { name: "System Logs", href: "/dashboard/logs", icon: Database },

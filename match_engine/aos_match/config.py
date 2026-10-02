@@ -34,6 +34,10 @@ COURSE_ALIASES = {
 # Three text signals are blended: word TF-IDF, character TF-IDF, LSA.
 W_WORD, W_CHAR, W_LSA = 0.50, 0.20, 0.30
 
+# Semantic Sentence Embeddings (Phase 8)
+USE_EMBEDDINGS = False
+W_EMB = 0.15  # weight if USE_EMBEDDINGS is True
+
 # Project titles are "fancy" and unreliable, so they get a small weight.
 # Thesis has only a title, so the title IS the main text (weight 0 here).
 TITLE_WEIGHT = {"project": 0.15, "thesis": 0.0}

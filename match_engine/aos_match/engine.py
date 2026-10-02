@@ -89,6 +89,20 @@ class ScopeIndex:
         self.surface = self._build_surface()
         self.feature_names = self.word_vec.get_feature_names_out()
 
+        # Phase 8: Sentence Embeddings
+        self.E_main = None
+        self.E_title = None
+        self.embed_model = None
+        if config.USE_EMBEDDINGS:
+            try:
+                from sentence_transformers import SentenceTransformer  # type: ignore
+                self.embed_model = SentenceTransformer("all-MiniLM-L6-v2")
+                self.E_main = normalize(self.embed_model.encode(self.main_raw, show_progress_bar=False))
+                if self.title_weight > 0:
+                    self.E_title = normalize(self.embed_model.encode([it["title"] for it in items], show_progress_bar=False))
+            except ImportError:
+                print("sentence-transformers not installed. Embeddings disabled.")
+
     # ------------------------------------------------------------------ helpers
     def _build_surface(self):
         counts = defaultdict(Counter)
@@ -107,10 +121,18 @@ class ScopeIndex:
         return " ".join(parts)
 
     # ------------------------------------------------------------------ scoring
-    def _cos_blend(self, qw, qc, ql, Wm, Cm, Lm):
-        return (config.W_WORD * cosine_similarity(qw, Wm)[0]
-                + config.W_CHAR * cosine_similarity(qc, Cm)[0]
-                + config.W_LSA * cosine_similarity(ql, Lm)[0])
+    def _cos_blend(self, qw, qc, ql, Wm, Cm, Lm, qe=None, Em=None):
+        sw = config.W_WORD * cosine_similarity(qw, Wm)[0]
+        sc = config.W_CHAR * cosine_similarity(qc, Cm)[0]
+        sl = config.W_LSA * cosine_similarity(ql, Lm)[0]
+        
+        if config.USE_EMBEDDINGS and qe is not None and Em is not None:
+            se = config.W_EMB * cosine_similarity(qe, Em)[0]
+            # normalise weights
+            w_total = config.W_WORD + config.W_CHAR + config.W_LSA + config.W_EMB
+            return (sw + sc + sl + se) / w_total
+            
+        return sw + sc + sl
 
     def _coverage(self, q_tokens: list[str]) -> np.ndarray:
         """IDF-weighted share of the query's words that each item contains.
@@ -145,9 +167,14 @@ class ScopeIndex:
         qw = self.word_vec.transform([q_pp])
         qc = self.char_vec.transform([q_pp])
         ql = normalize(self.svd.transform(qw))
-        s_main = self._cos_blend(qw, qc, ql, self.W_main, self.C_main, self.L_main)
+        
+        qe = None
+        if config.USE_EMBEDDINGS and getattr(self, "embed_model", None) is not None:
+            qe = normalize(self.embed_model.encode([query], show_progress_bar=False))
+            
+        s_main = self._cos_blend(qw, qc, ql, self.W_main, self.C_main, self.L_main, qe, self.E_main)
         if self.title_weight > 0:
-            s_title = self._cos_blend(qw, qc, ql, self.W_title, self.C_title, self.L_title)
+            s_title = self._cos_blend(qw, qc, ql, self.W_title, self.C_title, self.L_title, qe, self.E_title)
             raw = (1 - self.title_weight) * s_main + self.title_weight * s_title
         else:
             raw = s_main
@@ -189,15 +216,19 @@ class ScopeIndex:
 
     # ------------------------------------------------------------------- search
     def search(self, query, mode="auto", top_k=10, min_score=config.MIN_SCORE,
-               series=None, domain=None, exclude_id=None, include_people=False):
+               series=None, domain=None, exclude_id=None, include_people=False, members=None):
         q_tokens = tokenize(query)
         if mode == "auto":
             mode = "keyword" if len(q_tokens) <= 4 else "idea"
         scores, q_pp, qw, _ = self.score(query, mode)
         if scores is None:
-            return {"mode": mode, "results": [],
-                    "note": "None of the words in your query appear in this collection."}
+            from .text_utils import has_bangla_script
+            note = "None of the words in your query appear in this collection."
+            if has_bangla_script(query):
+                note = "Please search using English. We do not support Bangla script searches."
+            return {"mode": mode, "results": [], "note": note}
 
+        exclude_members = set(members) if members else set()
         order = np.argsort(-scores)
         results = []
         for pos in order:
@@ -207,6 +238,12 @@ class ScopeIndex:
             it = self.items[pos]
             if exclude_id and it["id"] == exclude_id:
                 continue
+            if exclude_members:
+                item_members = set(it.get("members", []))
+                if it.get("roll"):
+                    item_members.add(it["roll"])
+                if exclude_members & item_members:
+                    continue
             if series and it["series"] != str(series):
                 continue
             if domain and domain not in it["tags"]["domain"]:
@@ -219,12 +256,23 @@ class ScopeIndex:
         return {"mode": mode, "results": results}
 
     def _format(self, it, s, shared, sentence, spans, include_people):
+        # Convert index spans to text chunks for frontend: [ [text, is_highlight], ... ]
+        chunks = []
+        last_idx = 0
+        for start, end in spans:
+            if start > last_idx:
+                chunks.append([sentence[last_idx:start], False])
+            chunks.append([sentence[start:end], True])
+            last_idx = end
+        if last_idx < len(sentence):
+            chunks.append([sentence[last_idx:], False])
+            
         out = {
             "id": it["id"], "type": it["type"], "course": it["course"], "series": it["series"],
             "title": it["title"], "description": it["description"],
             "score": round(s, 4), "pct": raw_to_pct(s), "band": band_for(s),
             "sharedTerms": [lab for _, lab in shared],
-            "bestSentence": sentence, "highlightSpans": spans, "tags": it["tags"],
+            "bestSentence": sentence, "highlightSpans": chunks, "tags": it["tags"],
         }
         if include_people:
             out.update({"roll": it["roll"], "members": it.get("members", []),
@@ -232,7 +280,6 @@ class ScopeIndex:
                         "memberNames": it.get("memberNames", [])})
         return out
 
-    # ------------------------------------------------------------------- topics
     def topics(self, k=8, top_terms=6):
         k = max(2, min(k, len(self.items) // 3))
         km = KMeans(n_clusters=k, n_init=10, random_state=42).fit(self.L_main)
@@ -247,6 +294,71 @@ class ScopeIndex:
                         "size": int(len(idx)),
                         "itemIds": [self.items[i]["id"] for i in idx]})
         return sorted(out, key=lambda t: -t["size"])
+
+    def insights(self):
+        from collections import defaultdict, Counter
+        series_tags = defaultdict(lambda: defaultdict(int))
+        global_tags = Counter()
+        for it in self.items:
+            s = it["series"]
+            for dom in it["tags"]["domain"]:
+                series_tags[s][dom] += 1
+                global_tags[dom] += 1
+                
+        topics = self.topics(k=8)
+        series_topics = defaultdict(lambda: defaultdict(int))
+        for t in topics:
+            for item_id in t["itemIds"]:
+                s = self.items[self.id_to_pos[item_id]]["series"]
+                series_topics[s][t["topic"]] += 1
+                
+        underexplored = [tag for tag, count in global_tags.items() if count <= 2]
+        
+        sorted_series = sorted(series_tags.keys())
+        rising_topics = []
+        if len(sorted_series) >= 2:
+            newest, older = sorted_series[-1], sorted_series[-2]
+            for t in topics:
+                t_id = t["topic"]
+                if series_topics[newest][t_id] > series_topics[older][t_id]:
+                    rising_topics.append({"topic": t_id, "terms": t["terms"]})
+
+        return {
+            "seriesTags": {k: dict(v) for k, v in series_tags.items()},
+            "seriesTopics": {k: dict(v) for k, v in series_topics.items()},
+            "underexplored": underexplored,
+            "risingTopics": rising_topics,
+            "topics": topics
+        }
+
+    def cross_series(self, include_people=False):
+        # Pairs with score >= 0.55 between DIFFERENT series in the same pool
+        # This is a heavy computation, so it should be cached by the caller.
+        pairs = []
+        for i, it_a in enumerate(self.items):
+            text_a = it_a["description"] or it_a["title"]
+            scores, _, qw, _ = self.score(text_a, mode="idea")
+            if scores is None:
+                continue
+            for j in range(i + 1, len(self.items)):
+                it_b = self.items[j]
+                if it_a["series"] == it_b["series"]:
+                    continue
+                s = float(scores[j])
+                if s >= 0.55:
+                    shared = self._shared_terms(qw, j)
+                    out_a = {"id": it_a["id"], "title": it_a["title"], "series": it_a["series"]}
+                    out_b = {"id": it_b["id"], "title": it_b["title"], "series": it_b["series"]}
+                    if include_people:
+                        out_a.update({"roll": it_a.get("roll"), "members": it_a.get("members")})
+                        out_b.update({"roll": it_b.get("roll"), "members": it_b.get("members")})
+                    pairs.append({
+                        "score": round(s, 4), "pct": raw_to_pct(s), "band": band_for(s),
+                        "sharedTerms": [lab for _, lab in shared],
+                        "a": out_a, "b": out_b
+                    })
+        pairs.sort(key=lambda x: -x["score"])
+        return pairs
 
 
 class MatchEngine:
@@ -268,8 +380,15 @@ class MatchEngine:
     def from_mongo(cls, db=None):
         """Build engine from MongoDB.  If db is None, connects using env vars."""
         from . import store
+        from .text_utils import configure_vocab
         if db is None:
             db = store.connect()
+            
+        # 1. Load and inject dynamic vocabulary before preprocessing items
+        vocab = store.load_vocab(db)
+        configure_vocab(vocab)
+        
+        # 2. Load items and build
         items = store.load_all(db)
         if not items:
             raise RuntimeError("No items in MongoDB.  Run the importer first: "
@@ -306,6 +425,36 @@ class MatchEngine:
         return scope.search(text, mode="idea", top_k=top_k, exclude_id=item_id,
                             include_people=include_people, **kw)
 
+    def compare(self, id_a: str, id_b: str):
+        it_a = self.by_id.get(id_a)
+        it_b = self.by_id.get(id_b)
+        if not it_a or not it_b:
+            raise KeyError("item not found")
+        if (it_a["type"], it_a["course"]) != (it_b["type"], it_b["course"]):
+            raise ValueError("Cannot compare items from different scopes")
+            
+        scope = self.resolve(it_a["type"], it_a["course"])
+        pos_b = scope.id_to_pos[id_b]
+        
+        text_a = it_a["description"] or it_a["title"]
+        text_b = it_b["description"] or it_b["title"]
+        
+        scores, _, qw, _ = scope.score(text_a, mode="idea")
+        s = float(scores[pos_b])
+        shared = scope._shared_terms(qw, pos_b, n=15)
+        
+        stems = {p for f, _ in shared for p in f.split()}
+        def get_spans(text):
+            return [[m.start(), m.end()] for m in _WORD_RE.finditer(text)
+                    if set(tokenize(m.group())) & stems]
+                    
+        return {
+            "score": round(s, 4), "pct": raw_to_pct(s), "band": band_for(s),
+            "sharedTerms": [lab for _, lab in shared],
+            "a": {"id": id_a, "title": it_a["title"], "text": text_a, "spans": get_spans(text_a)},
+            "b": {"id": id_b, "title": it_b["title"], "text": text_b, "spans": get_spans(text_b)},
+        }
+
     def info(self):
         out = []
         for (t, c), sc in sorted(self.scopes.items()):
@@ -315,6 +464,12 @@ class MatchEngine:
                 "domains": sorted({d for i in sc.items for d in i["tags"]["domain"]}),
             })
         return out
+        
+    def insights(self, type_: str, course: str | None = None):
+        return self.resolve(type_, course).insights()
+        
+    def cross_series(self, type_: str, course: str | None = None, include_people=False):
+        return self.resolve(type_, course).cross_series(include_people=include_people)
 
     def topics(self, type_, course, k=8):
         return self.resolve(type_, course).topics(k)

@@ -11,3 +11,4 @@ python-dotenv>=1.0
 pytest>=7
 httpx>=0.26
 mongomock>=4.1
+sentence-transformers>=3.0

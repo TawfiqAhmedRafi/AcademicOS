@@ -129,7 +129,29 @@ def ensure_indexes(db: Database) -> None:
         IndexModel([("course", ASCENDING), ("series", ASCENDING)], name="course_series"),
         IndexModel([("importBatch", ASCENDING)], name="import_batch"),
     ])
-    logger.info("Indexes ensured on %s", COL_ITEMS)
+    
+    # Logs: TTL index for 180 days (15552000 seconds)
+    db[COL_LOGS].create_indexes([
+        IndexModel([("ts", ASCENDING)], expireAfterSeconds=15552000, name="ttl_180_days"),
+    ])
+    logger.info("Indexes ensured on %s and %s", COL_ITEMS, COL_LOGS)
+
+def load_vocab(db: Database) -> dict[str, list[tuple[str, str]] | set[str]]:
+    """Load editable vocabulary from DB."""
+    synonyms = []
+    phrases = []
+    stopwords = set()
+    
+    for doc in db[COL_VOCAB].find({"enabled": {"$ne": False}}):
+        k = doc.get("kind")
+        if k == "synonym":
+            synonyms.append((doc["from"], doc["to"]))
+        elif k == "phrase":
+            phrases.append((doc["from"], doc["to"]))
+        elif k == "stopword":
+            stopwords.add(doc["from"])
+            
+    return {"synonym": synonyms, "phrase": phrases, "stopword": stopwords}
 
 
 # ── Pre-flight checks ───────────────────────────────────────────────────────
