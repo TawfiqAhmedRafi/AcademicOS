@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     const pdf = await generateRoutinePdf(activeSeries, activeSlots, facultyList);
 
     // 3. Stream it to the client
-    return new NextResponse(pdf, {
+    return new NextResponse(pdf as any, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",

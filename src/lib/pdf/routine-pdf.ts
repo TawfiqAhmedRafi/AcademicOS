@@ -214,7 +214,7 @@ export async function generateRoutinePdf(configs: any[], slots: any[], teachers:
       channel: "chrome" 
     });
   } else {
-    const chromium = (await import("@sparticuz/chromium")).default;
+    const chromium = (await import("@sparticuz/chromium")).default as any;
     const puppeteerCore = (await import("puppeteer-core")).default;
     browser = await puppeteerCore.launch({
       args: chromium.args,
@@ -226,7 +226,7 @@ export async function generateRoutinePdf(configs: any[], slots: any[], teachers:
 
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.setContent(html, { waitUntil: "networkidle0" as any });
     
     const pdfBytes = await page.pdf({
       width: "14in", height: "8.5in", printBackground: true,

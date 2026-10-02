@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     // Stream the generated buffer to the client
     const pdf = await generateTabulationPdf(draft);
 
-    return new NextResponse(pdf, {
+    return new NextResponse(pdf as any, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
