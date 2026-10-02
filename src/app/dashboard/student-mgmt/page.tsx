@@ -24,6 +24,10 @@ export default function StudentManagementPage() {
   const [dropModal, setDropModal] = useState<Student | null>(null);
   const [newSeries, setNewSeries] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 60;
 
   const { showToast } = useToast();
 
@@ -98,6 +102,16 @@ export default function StudentManagementPage() {
 
     return matchesSearch && matchesSeries;
   });
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
+  const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
+  const currentStudents = filteredStudents.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -183,6 +197,16 @@ export default function StudentManagementPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        )}
+        
+        {!isLoading && filteredStudents.length > 0 && (
+          <div className="p-4 border-t border-slate-200 dark:border-white/10">
+            <Pagination 
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
           </div>
         )}
       </div>

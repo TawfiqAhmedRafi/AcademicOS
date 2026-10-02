@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import DropdownFilter from "@/app/components/DropdownFilter";
-import { Loader2, Search, Database, ChevronLeft, ChevronRight, User } from "lucide-react";
+import Pagination from "@/app/components/Pagination";
+import { Loader2, Search, Database, User } from "lucide-react";
 import { toast } from "react-hot-toast";
 
 export default function ProjectsThesisPage() {
@@ -204,30 +205,16 @@ export default function ProjectsThesisPage() {
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700/50">
+      {totalPages > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700/50 mt-6">
           <p className="text-sm text-gray-500 text-center sm:text-left">
-            Showing <span className="font-semibold">{(page - 1) * 60 + 1}</span> to <span className="font-semibold">{Math.min(page * 60, totalItems)}</span> of <span className="font-semibold">{totalItems}</span> records
+            Showing <span className="font-semibold">{Math.min((page - 1) * 60 + 1, totalItems)}</span> to <span className="font-semibold">{Math.min(page * 60, totalItems)}</span> of <span className="font-semibold">{totalItems}</span> records
           </p>
-          <div className="flex items-center gap-2">
-            <button
-              disabled={page === 1}
-              onClick={() => setPage(p => p - 1)}
-              className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors text-gray-600 dark:text-gray-300"
-            >
-              <ChevronLeft size={20} />
-            </button>
-            <span className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
-              Page {page} of {totalPages}
-            </span>
-            <button
-              disabled={page === totalPages}
-              onClick={() => setPage(p => p + 1)}
-              className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors text-gray-600 dark:text-gray-300"
-            >
-              <ChevronRight size={20} />
-            </button>
-          </div>
+          <Pagination 
+            currentPage={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+          />
         </div>
       )}
     </div>

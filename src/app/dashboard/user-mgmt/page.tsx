@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useToast } from "@/app/components/ToastProvider";
+import Pagination from "@/app/components/Pagination";
 import Swal from "sweetalert2";
 
 type User = {
@@ -33,6 +34,11 @@ export default function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
+  
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 60;
+
   const { showToast } = useToast();
 
   const fetchUsers = async () => {
@@ -96,6 +102,16 @@ export default function UserManagement() {
         u.email.toLowerCase().includes(search.toLowerCase()))
   );
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
+  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
+  const currentUsers = filteredUsers.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       <div className="mb-8">
@@ -150,7 +166,7 @@ export default function UserManagement() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-white/5">
-                {filteredUsers.map((user) => {
+                {currentUsers.map((user) => {
                   const isLocked =
                     user.lockoutUntil &&
                     new Date(user.lockoutUntil) > new Date();
@@ -255,6 +271,16 @@ export default function UserManagement() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+        
+        {!isLoading && filteredUsers.length > 0 && (
+          <div className="p-4 border-t border-slate-200 dark:border-white/10 mt-auto">
+            <Pagination 
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
           </div>
         )}
       </div>

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Plus, Trash, Check, X, RefreshCcw, Loader2 } from "lucide-react";
 import Navbar from "@/app/components/Navbar";
 import DropdownFilter from "@/app/components/DropdownFilter";
+import Pagination from "@/app/components/Pagination";
 import { useToast } from "@/app/components/ToastProvider";
 import Swal from "sweetalert2";
 
@@ -20,6 +21,10 @@ export default function MatchVocabPage() {
   const [vocab, setVocab] = useState<Vocab[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
 
   // New item form
   const [kind, setKind] = useState<Vocab["kind"]>("synonym");
@@ -45,6 +50,12 @@ export default function MatchVocabPage() {
       setLoading(false);
     }
   };
+
+  const totalPages = Math.ceil(vocab.length / itemsPerPage);
+  const currentVocab = vocab.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -214,7 +225,7 @@ if (!result.isConfirmed) return;
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 dark:divide-gray-700/50">
-              {vocab.map(v => (
+              {currentVocab.map(v => (
                 <tr key={v._id} className={v.enabled ? "text-gray-900 dark:text-gray-100" : "text-gray-400 dark:text-gray-500"}>
                   <td className="px-6 py-4">
                     <button onClick={() => handleToggle(v)} className="flex items-center gap-2">
@@ -237,6 +248,16 @@ if (!result.isConfirmed) return;
             </tbody>
           </table>
         </div>
+        
+        {!loading && vocab.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 mt-6 flex justify-center">
+            <Pagination 
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        )}
 
     </div>
   );

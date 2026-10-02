@@ -139,7 +139,7 @@ export default function MatchAnalysisPage() {
                 <div className="space-y-2">
                   {insights.risingTopics?.map((t: any) => (
                     <div key={t.topic} className="flex gap-2">
-                      <span className="font-bold text-green-600">↑ Cluster {t.topic}:</span>
+                      <span className="font-bold text-green-600 whitespace-nowrap shrink-0">↑ Cluster {t.topic}:</span>
                       <span className="text-gray-700 dark:text-gray-300">{t.terms.join(", ")}</span>
                     </div>
                   ))}

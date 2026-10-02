@@ -18,8 +18,8 @@ export default function Footer() {
             </p>
             <div className="flex gap-4">
               
-              <a href="#" className="text-slate-400 hover:text-ruet-blue dark:hover:text-ruet-gold"><Globe size={20} /></a>
-              <a href="#" className="text-slate-400 hover:text-ruet-blue dark:hover:text-ruet-gold"><Mail size={20} /></a>
+              <a href="https://www.ete.ruet.ac.bd/" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-ruet-blue dark:hover:text-ruet-gold"><Globe size={20} /></a>
+              <a href="https://mail.google.com/mail/?view=cm&fs=1&to=rafi70722@gmail.com" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-ruet-blue dark:hover:text-ruet-gold"><Mail size={20} /></a>
             </div>
           </div>
 
@@ -27,10 +27,10 @@ export default function Footer() {
           <div>
             <h4 className="mb-6 font-semibold text-slate-900 dark:text-white">Platform Modules</h4>
             <ul className="space-y-4 text-sm text-slate-500 dark:text-slate-400">
-              <li><Link href="#" className="hover:text-ruet-blue dark:hover:text-ruet-gold">Course Registration</Link></li>
-              <li><Link href="#" className="hover:text-ruet-blue dark:hover:text-ruet-gold">Similarity Matcher</Link></li>
-              <li><Link href="#" className="hover:text-ruet-blue dark:hover:text-ruet-gold">Risk Prediction</Link></li>
-              <li><Link href="#" className="hover:text-ruet-blue dark:hover:text-ruet-gold">Grade Calculation</Link></li>
+              <li><Link href="#" className="hover:text-ruet-blue dark:hover:text-ruet-gold">Core Academics</Link></li>
+              <li><Link href="/match" className="hover:text-ruet-blue dark:hover:text-ruet-gold">Similarity Matcher</Link></li>
+              <li><Link href="#" className="hover:text-ruet-blue dark:hover:text-ruet-gold">Match Analytics</Link></li>
+              <li><Link href="#" className="hover:text-ruet-blue dark:hover:text-ruet-gold">Grade Computation</Link></li>
             </ul>
           </div>
 

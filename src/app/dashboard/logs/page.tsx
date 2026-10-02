@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ShieldCheck, Activity, KeyRound, Server, Loader2, Database } from "lucide-react";
+import Pagination from "@/app/components/Pagination";
 
 type Log = {
   _id: string;
@@ -14,6 +15,10 @@ type Log = {
 export default function SystemLogsPage() {
   const [logs, setLogs] = useState<Log[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 30;
 
   useEffect(() => {
     const fetchLogs = async () => {
@@ -37,6 +42,12 @@ export default function SystemLogsPage() {
     }
   };
 
+  const totalPages = Math.ceil(logs.length / itemsPerPage);
+  const currentLogs = logs.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-4xl pb-20">
       <div className="mb-8">
@@ -53,7 +64,7 @@ export default function SystemLogsPage() {
           <div className="py-12 text-center text-slate-500 dark:text-slate-400">No logs generated yet.</div>
         ) : (
           <div className="space-y-6">
-            {logs.map(log => {
+            {currentLogs.map(log => {
               const { icon: Icon, color } = getLogIcon(log.type);
               return (
                 <div key={log._id} className="flex items-start gap-4 border-b border-slate-100 pb-6 last:border-0 last:pb-0 dark:border-white/5">
@@ -72,6 +83,16 @@ export default function SystemLogsPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+        
+        {!isLoading && logs.length > 0 && (
+          <div className="p-4 border-t border-slate-200 dark:border-white/10 mt-6 -mx-6 -mb-6 bg-slate-50/50 dark:bg-white/5">
+            <Pagination 
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
           </div>
         )}
       </div>

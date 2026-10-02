@@ -10,11 +10,10 @@ export default function FinalCTA() {
       <div className="w-full px-4 text-center sm:px-6 lg:px-12 2xl:px-24">
         <div className="glass-panel mx-auto max-w-5xl rounded-3xl p-10 sm:p-16 lg:p-20">
           <h2 className="text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-5xl">
-            Ready to deploy your academic infrastructure?
+            Ready to upgrade your academic operations?
           </h2>
           <p className="mx-auto mt-6 max-w-2xl text-xl text-slate-600 dark:text-slate-400">
-            Secure, scalable, and built for the precise needs of modern
-            university departments.
+            From streamlined result generation to advanced cross-batch similarity detection. Build a smarter department today.
           </p>
 
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
@@ -29,10 +28,10 @@ export default function FinalCTA() {
               />
             </Link>
             <Link
-              href="/modules"
+              href="/match"
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-transparent px-8 py-4 text-base font-bold text-slate-900 transition-colors hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10 sm:w-auto"
             >
-              Explore All Modules
+              Try Project & Thesis Matcher
             </Link>
           </div>
         </div>

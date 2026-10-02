@@ -17,7 +17,7 @@ export default function Hero() {
         </h1>
         
         <p className="mx-auto mt-8 max-w-3xl text-lg text-slate-600 dark:text-slate-400 sm:text-xl lg:text-2xl leading-relaxed">
-          Replace fragmented spreadsheets and paper records with a single, unified environment. From routine registration and ML based risk prediction to cross-batch similarity detection.
+          Replace fragmented spreadsheets and paper records with a single, unified environment. From routine registration and advanced match analytics to cross-batch similarity detection.
         </p>
         
         <div className="mt-12 flex flex-col items-center justify-center gap-5 sm:flex-row">
