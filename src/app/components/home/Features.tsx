@@ -1,4 +1,4 @@
-import { Fingerprint, Network, ShieldAlert, GraduationCap, Clock, BookOpen } from "lucide-react";
+import { Fingerprint, Network, BarChart3, GraduationCap, Clock, BookOpen } from "lucide-react";
 
 export default function Features() {
   const features = [
@@ -8,9 +8,9 @@ export default function Features() {
       icon: <Fingerprint size={28} className="text-ruet-blue dark:text-ruet-gold" />
     },
     {
-      title: "Risk Prediction ML",
-      desc: "Logistic Regression model analyzing attendance, submission rates, and GPA trends to auto-flag at-risk students.",
-      icon: <ShieldAlert size={28} className="text-ruet-blue dark:text-ruet-gold" />
+      title: "Match Analytics",
+      desc: "Telemetry dashboard tracking rising research topics, underexplored domains, and cross-series similarity clusters.",
+      icon: <BarChart3 size={28} className="text-ruet-blue dark:text-ruet-gold" />
     },
     {
       title: "Core Academics",
