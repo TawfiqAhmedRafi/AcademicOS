@@ -57,3 +57,8 @@ usercollection.json
 23_2200.xlsx
 21_3200.xlsx
 22_3200.xlsx
+match_engine/data/raw/*.xlsx
+match_engine/data/*.json
+match_engine/.env
+match_engine/MATCH_PLAN.md
+ANTIGRAVITY_PLAN.md
