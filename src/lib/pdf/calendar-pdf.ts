@@ -194,42 +194,8 @@ export async function generateCalendarPdf(calendar: any, seriesConfig: any, head
   </body>
   </html>`;
 
-  let browser;
-  if (process.env.NODE_ENV === "development") {
-    const puppeteer = (await import("puppeteer")).default;
-    browser = await puppeteer.launch({ 
-      headless: true, 
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-      channel: "chrome" 
-    });
-  } else {
-    const chromium = (await import("@sparticuz/chromium")).default as any;
-    const puppeteerCore = (await import("puppeteer-core")).default;
-    browser = await puppeteerCore.launch({
-      args: chromium.args,
-      defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath(),
-      headless: chromium.headless,
-    });
-  }
-
-  try {
-    const page = await browser.newPage();
-    // Set viewport to A4 proportions (96 DPI) so 100vh in the page
-    // maps to the true printed page height, keeping the signature
-    // block correctly pinned to the bottom of the page.
-    await page.setViewport({ width: 794, height: 1123 });
-    await page.setContent(html, { waitUntil: "networkidle0" as any });
-    const pdfBytes = await page.pdf({
-      format: "A4",
-      landscape: false,
-      printBackground: true,
-      margin: { top: "0in", right: "0in", bottom: "0in", left: "0in" },
-    });
-    return Buffer.from(pdfBytes);
-  } finally {
-    if (browser) await browser.close();
-  }
+  const { renderPdfViaService } = await import("./pdf-client");
+  return renderPdfViaService(html);
 }
 
 function escapeHtml(value: unknown): string {

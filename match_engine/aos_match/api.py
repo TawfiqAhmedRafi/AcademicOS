@@ -10,7 +10,7 @@ Env:  MATCH_API_KEY=secret   (optional; if set, every call needs header X-Intern
 import os
 from typing import Literal, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from . import config, importer
@@ -170,3 +170,26 @@ def reindex():
         items, skipped = importer.run(verbose=False)
         _state["engine"] = MatchEngine(items)
         return {"items": len(items), "skipped": [list(s) for s in skipped]}
+
+
+# ── PDF Generation (WeasyPrint) ──────────────────────────────────────────────
+
+class PdfBody(BaseModel):
+    html: str = Field(..., min_length=10, max_length=500_000)
+    pageWidth: str = Field("210mm", description="CSS page width, e.g. '210mm', '14in'")
+    pageHeight: str = Field("297mm", description="CSS page height, e.g. '297mm', '8.5in'")
+
+
+@app.post("/match/pdf", dependencies=[Depends(check_key)])
+def generate_pdf(body: PdfBody):
+    """Convert raw HTML to PDF bytes. Called server-to-server by Next.js."""
+    from .pdf_service import html_to_pdf
+    try:
+        pdf_bytes = html_to_pdf(body.html, body.pageWidth, body.pageHeight)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=document.pdf"},
+        )
+    except Exception as e:
+        raise HTTPException(500, f"PDF generation failed: {e}")
