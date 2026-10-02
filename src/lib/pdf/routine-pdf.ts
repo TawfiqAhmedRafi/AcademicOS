@@ -187,10 +187,12 @@ export async function generateRoutinePdf(configs: any[], slots: any[], teachers:
         <div class="side-note">P&amp;LB = Prayer &amp; Lunch Break</div>
         <div class="side-row">
           <table class="side-table">
+            <colgroup><col style="width:28pt;" /><col /></colgroup>
             <thead><tr><th colspan="2">Teachers of ETE</th></tr></thead>
             <tbody>${sortedTeachers.map(t => `<tr><td class="t-code">${escapeHtml(t.initials)}</td><td>${escapeHtml(t.name)}</td></tr>`).join("")}</tbody>
           </table>
           <table class="side-table">
+            <colgroup><col style="width:30pt;" /><col /></colgroup>
             <thead><tr><th>Period</th><th>Time Schedule</th></tr></thead>
             <tbody>${PERIOD_SCHEDULE.map(r => `<tr><td>${r.period}</td><td>${r.time}</td></tr>`).join("")}</tbody>
           </table>
