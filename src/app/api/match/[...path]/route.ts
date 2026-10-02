@@ -162,8 +162,28 @@ async function handleProxy(req: Request, { params }: { params: { path: string[] 
         
         const result = await db.collection("matchlogs").insertOne(logDoc);
         data.logId = result.insertedId.toString();
+
+        // Name Hydration
+        if (includePeople && data.results && data.results.length > 0) {
+          const userCache = new Map();
+          for (const res of data.results) {
+            if (!res.studentName && (!res.memberNames || res.memberNames.length === 0)) {
+               if (res.members && res.members.length > 0) {
+                  res.memberNames = [];
+                  for (const roll of res.members) {
+                     if (!userCache.has(roll)) {
+                        const u = await db.collection("users").findOne({ student_id: roll }, { projection: { name: 1 } });
+                        userCache.set(roll, u ? u.name : null);
+                     }
+                     const n = userCache.get(roll);
+                     res.memberNames.push(n || "");
+                  }
+               }
+            }
+          }
+        }
       } catch (logErr) {
-        console.error("Failed to write to matchlogs", logErr);
+        console.error("Failed to write to matchlogs or hydrate names", logErr);
       }
     }
 

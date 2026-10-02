@@ -156,7 +156,11 @@ class ScopeIndex:
                 fixed.append(t)
                 continue
             m = difflib.get_close_matches(t, vocab, n=1, cutoff=0.82)
-            fixed.append(m[0] if m else t)
+            # Prevent aggressive matching like 'weather' (7) -> 'water' (5)
+            if m and abs(len(m[0]) - len(t)) <= 1:
+                fixed.append(m[0])
+            else:
+                fixed.append(t)
         return fixed
 
     def score(self, query: str, mode: str):

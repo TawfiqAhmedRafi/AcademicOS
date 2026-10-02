@@ -3,6 +3,7 @@
 import { useState, useEffect, useTransition } from "react";
 import { Search, Info, Loader2, Sparkles, BookOpen, Presentation, Filter, Hash, User, RefreshCcw } from "lucide-react";
 import Swal from "sweetalert2";
+import DropdownFilter from "@/app/components/DropdownFilter";
 
 type UserProps = {
   id: string;
@@ -61,7 +62,7 @@ function HighlightedText({ spans }: { spans: [string, boolean][] }) {
     <span>
       {spans.map(([text, isHighlight], i) =>
         isHighlight ? (
-          <mark key={i} className="bg-yellow-200 dark:bg-yellow-900/60 dark:text-yellow-100 rounded px-1">
+          <mark key={i} className="bg-blue-100 dark:bg-blue-900/40 text-blue-900 dark:text-blue-100 rounded px-1">
             {text}
           </mark>
         ) : (
@@ -76,8 +77,21 @@ function HighlightedText({ spans }: { spans: [string, boolean][] }) {
 
 export default function MatchClient({ user }: { user: UserProps }) {
   const [scopes, setScopes] = useState<ScopeInfo[]>([]);
-  const [type, setType] = useState<"project" | "thesis" | null>(null);
-  const [course, setCourse] = useState<string | null>(null);
+  const [type, setType] = useState<"project" | "thesis" | null>("project");
+  const [course, setCourse] = useState<string | null>("2200");
+  const target = type === "thesis" ? "thesis" : course || "2200";
+
+  const handleTargetChange = (newTarget: string) => {
+    if (newTarget === "thesis") {
+      setType("thesis");
+      setCourse("4200"); // Or keep null
+    } else {
+      setType("project");
+      setCourse(newTarget);
+    }
+    setQuery("");
+    setResults([]);
+  };
   
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -217,74 +231,7 @@ if (!result.isConfirmed) return;
     }
   };
 
-  // ── Step 1: Type Selection ──────────────────────────────────────────────
-  if (!type) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-8 animate-in fade-in zoom-in duration-300">
-        <div className="text-center space-y-4">
-          <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 mb-2">
-            <Sparkles size={32} />
-          </div>
-          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-gray-900 dark:text-white">
-            AOS Match
-          </h1>
-          <p className="text-lg text-gray-600 dark:text-gray-400 max-w-lg mx-auto">
-            Discover similar academic works in our repository instantly using advanced natural language processing.
-          </p>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl px-4">
-          <button
-            onClick={() => setType("project")}
-            className="group relative flex flex-col items-center p-8 rounded-3xl bg-white dark:bg-gray-800 border-2 border-transparent hover:border-blue-500 shadow-sm hover:shadow-xl transition-all duration-300"
-          >
-            <Presentation size={48} className="text-blue-500 mb-4 group-hover:scale-110 transition-transform" />
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Projects</h2>
-            <p className="text-gray-500 dark:text-gray-400 text-center">Search through ETE 2200 and 3200 course projects.</p>
-          </button>
-          
-          <button
-            onClick={() => setType("thesis")}
-            className="group relative flex flex-col items-center p-8 rounded-3xl bg-white dark:bg-gray-800 border-2 border-transparent hover:border-purple-500 shadow-sm hover:shadow-xl transition-all duration-300"
-          >
-            <BookOpen size={48} className="text-purple-500 mb-4 group-hover:scale-110 transition-transform" />
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Thesis</h2>
-            <p className="text-gray-500 dark:text-gray-400 text-center">Search the final year thesis and research repository.</p>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Step 2: Course Selection (Projects only) ────────────────────────────
-  if (type === "project" && !course) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-8 animate-in slide-in-from-bottom-8 duration-300">
-        <button onClick={() => setType(null)} className="text-sm text-gray-500 hover:text-gray-900 dark:hover:text-white absolute top-24 left-6 md:left-12 flex items-center">
-          ← Back to selection
-        </button>
-        <div className="text-center">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Select Course</h2>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-xl px-4">
-          <button
-            onClick={() => setCourse("2200")}
-            className="p-6 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-400 shadow-sm hover:shadow-md transition-all"
-          >
-            <span className="block text-2xl font-bold text-gray-900 dark:text-white">ETE 2200</span>
-            <span className="text-sm text-gray-500">Junior Year Projects</span>
-          </button>
-          <button
-            onClick={() => setCourse("3200")}
-            className="p-6 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-400 shadow-sm hover:shadow-md transition-all"
-          >
-            <span className="block text-2xl font-bold text-gray-900 dark:text-white">ETE 3200</span>
-            <span className="text-sm text-gray-500">Senior Year Projects</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // ── Step 1 & 2 removed: Using integrated search UI directly ──
 
   // ── Step 3: Search Interface ─────────────────────────────────────────────
   
@@ -301,18 +248,9 @@ if (!result.isConfirmed) return;
       <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100 dark:border-gray-700/50">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <div>
-            <div className="flex items-center gap-3 mb-2">
-              <button onClick={handleReset} className="text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
-                ←
-              </button>
               <h2 className="text-2xl font-bold flex items-center gap-2">
-                {type === "project" ? (
-                  <><Presentation className="text-blue-500" /> Project Search: ETE {course}</>
-                ) : (
-                  <><BookOpen className="text-purple-500" /> Thesis Search</>
-                )}
+                <Sparkles className="text-blue-500" /> AI Semantic Search
               </h2>
-            </div>
             {currentScope && (
               <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
                 <Hash size={14} /> Searching {currentScope.count} documents
@@ -357,22 +295,37 @@ if (!result.isConfirmed) return;
         {/* Search View */}
         {activeTab === "search" && (
           <div className="space-y-4">
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400">
-                <Search size={20} />
-              </div>
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Describe your idea or paste keywords..."
-                className="w-full pl-12 pr-4 py-4 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-gray-900 dark:text-white placeholder-gray-400"
-              />
-              {(isFetching || isPending) && (
-                <div className="absolute inset-y-0 right-0 pr-4 flex items-center text-blue-500">
-                  <Loader2 size={20} className="animate-spin" />
+            <div className="flex flex-col md:flex-row gap-3 relative">
+              <div className="relative flex-1">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400">
+                  <Search size={20} />
                 </div>
-              )}
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Describe your idea or paste keywords..."
+                  className="w-full pl-12 pr-4 py-4 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-gray-900 dark:text-white placeholder-gray-400"
+                />
+                {(isFetching || isPending) && (
+                  <div className="absolute inset-y-0 right-0 pr-4 flex items-center text-blue-500">
+                    <Loader2 size={20} className="animate-spin" />
+                  </div>
+                )}
+              </div>
+              
+              <div className="w-full md:w-48">
+                <DropdownFilter
+                  value={target}
+                  onChange={handleTargetChange}
+                  options={[
+                    { label: "Projects ETE 2200", value: "2200" },
+                    { label: "Projects ETE 3200", value: "3200" },
+                    { label: "Thesis", value: "thesis" }
+                  ]}
+                  fullWidth
+                />
+              </div>
             </div>
 
             <div className="flex flex-wrap gap-4 items-center justify-between bg-gray-50 dark:bg-gray-900/30 p-3 rounded-xl border border-gray-100 dark:border-gray-800">
@@ -471,19 +424,11 @@ if (!result.isConfirmed) return;
                         {r.title}
                       </h3>
                     </div>
-                    
-                    <button 
-                      onClick={() => handleFindSimilar(r.id)}
-                      className="shrink-0 p-2 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 dark:bg-gray-900/50 dark:hover:bg-blue-900/30 rounded-xl transition-colors"
-                      title="Find items similar to this one"
-                    >
-                      <Sparkles size={18} />
-                    </button>
                   </div>
 
                   {/* Similarity specific highlighting */}
                   {r.highlightSpans?.length > 0 && (
-                    <div className="mb-4 text-sm text-gray-700 dark:text-gray-300 border-l-4 border-yellow-400 dark:border-yellow-600 pl-3 py-1 bg-yellow-50/50 dark:bg-yellow-900/10 rounded-r-lg">
+                    <div className="mb-4 text-sm text-gray-700 dark:text-gray-300 border-l-4 border-blue-400 dark:border-blue-600 pl-3 py-1 bg-blue-50/50 dark:bg-blue-900/10 rounded-r-lg">
                       <HighlightedText spans={r.highlightSpans} />
                     </div>
                   )}
@@ -504,13 +449,13 @@ if (!result.isConfirmed) return;
                            {r.roll && <span className="text-gray-500">({r.roll})</span>}
                          </div>
                       )}
-                      {!r.studentName && r.memberNames && r.memberNames.length > 0 && (
+                      {!r.studentName && r.members && r.members.length > 0 && (
                          <div className="flex items-start gap-1.5">
                            <User size={14} className="text-gray-400 mt-0.5" />
                            <div className="flex flex-col">
-                             {r.memberNames.map((n, i) => (
+                             {r.members.map((roll, i) => (
                                <span key={i} className="font-medium text-gray-800 dark:text-gray-200">
-                                 {n} <span className="text-gray-500 font-normal">({r.members?.[i]})</span>
+                                 {r.memberNames?.[i] ? `${r.memberNames[i]} ` : ""}<span className="text-gray-500 font-normal">({roll})</span>
                                </span>
                              ))}
                            </div>
@@ -523,7 +468,7 @@ if (!result.isConfirmed) return;
                   <div className="flex flex-wrap items-center gap-2 mt-auto pt-4 border-t border-gray-100 dark:border-gray-700/50">
                     <Filter size={14} className="text-gray-400" />
                     {r.tags?.domain.map((d, i) => (
-                      <span key={i} className="text-xs text-purple-600 dark:text-purple-400">#{d}</span>
+                      <span key={i} className="px-2 py-1 text-xs font-semibold bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 rounded-md border border-gray-200 dark:border-gray-700">{d}</span>
                     ))}
                     {r.sharedTerms?.slice(0, 5).map((t, i) => (
                       <span key={i} className="px-2 py-1 text-[10px] font-medium bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-md">
@@ -548,10 +493,10 @@ if (!result.isConfirmed) return;
                 setActiveTab("search");
                 setQuery(t.terms.join(" "));
               }}
-              className="flex flex-col items-start text-left p-6 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/50 rounded-2xl hover:border-purple-500 dark:hover:border-purple-400 shadow-sm hover:shadow-md transition-all group"
+              className="flex flex-col items-start text-left p-6 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/50 rounded-2xl hover:border-blue-500 dark:hover:border-blue-400 shadow-sm hover:shadow-md transition-all group"
             >
               <div className="flex items-center justify-between w-full mb-4">
-                <span className="text-xs font-bold uppercase tracking-wider text-purple-500">Cluster {t.topic}</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-blue-500">Cluster {t.topic}</span>
                 <span className="text-xs font-medium text-gray-400 bg-gray-50 dark:bg-gray-900 px-2 py-1 rounded-md">{t.size} items</span>
               </div>
               <div className="flex flex-wrap gap-1.5 mb-2">
@@ -561,7 +506,7 @@ if (!result.isConfirmed) return;
                   </span>
                 ))}
               </div>
-              <span className="text-xs font-medium text-purple-600 opacity-0 group-hover:opacity-100 transition-opacity mt-auto pt-4 flex items-center gap-1">
+              <span className="text-xs font-medium text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity mt-auto pt-4 flex items-center gap-1">
                 <Search size={12} /> Search this topic
               </span>
             </button>

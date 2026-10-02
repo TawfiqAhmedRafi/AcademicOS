@@ -13,8 +13,11 @@ export default async function MatchPage() {
   if (!session?.user) redirect("/login");
 
   return (
-    <div className="pb-12">
-      <MatchClient user={session.user} />
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+      <Navbar />
+      <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+        <MatchClient user={session.user} />
+      </div>
     </div>
   );
 }
