@@ -315,7 +315,7 @@ export default function MatchClient({ user }: { user: UserProps }) {
           {(user.isAdmin || user.role === "admin" || user.role === "dept_head") && (
             <button
               onClick={handleReindex}
-              className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors flex items-center gap-2"
+              className="w-full md:w-auto justify-center px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors flex items-center gap-2"
             >
               <RefreshCcw size={16} /> Rebuild Index
             </button>
@@ -367,8 +367,8 @@ export default function MatchClient({ user }: { user: UserProps }) {
               )}
             </div>
 
-            <div className="flex flex-wrap gap-4 items-center justify-between bg-gray-50 dark:bg-gray-900/30 p-3 rounded-xl border border-gray-100 dark:border-gray-800">
-              <div className="flex gap-2 p-1 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+            <div className="flex flex-col md:flex-row flex-wrap gap-4 items-stretch md:items-center justify-between bg-gray-50 dark:bg-gray-900/30 p-3 rounded-xl border border-gray-100 dark:border-gray-800">
+              <div className="flex gap-2 p-1 bg-white dark:bg-gray-800 rounded-lg shadow-sm justify-center">
                 {(["auto", "keyword", "idea"] as const).map((m) => (
                   <button
                     key={m}

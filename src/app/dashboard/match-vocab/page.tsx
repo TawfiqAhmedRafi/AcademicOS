@@ -131,15 +131,15 @@ if (!result.isConfirmed) return;
   return (
     <div className="space-y-8 animate-in fade-in pb-12">
         
-        <div className="flex justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Search Vocabulary</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">Search Vocabulary</h1>
             <p className="text-gray-500 mt-1">Manage custom synonyms, phrase mapping, and stopwords.</p>
           </div>
           <button
             onClick={handleReindex}
             disabled={reindexing}
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl flex items-center gap-2 transition-all disabled:opacity-50 shadow-sm"
+            className="w-full md:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-sm"
           >
             {reindexing ? <Loader2 size={18} className="animate-spin" /> : <RefreshCcw size={18} />}
             Reindex Engine
@@ -154,8 +154,8 @@ if (!result.isConfirmed) return;
 
         <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
           <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Add New Rule</h2>
-          <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-4">
-            <div className="space-y-1">
+          <form onSubmit={handleCreate} className="flex flex-col md:flex-row flex-wrap items-stretch md:items-end gap-4">
+            <div className="space-y-1 w-full md:w-auto">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">Kind</label>
               <DropdownFilter
                 value={kind}
@@ -168,7 +168,7 @@ if (!result.isConfirmed) return;
               />
             </div>
             
-            <div className="space-y-1 flex-1">
+            <div className="space-y-1 flex-1 w-full md:w-auto">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 From {kind === "phrase" ? "(regex allowed)" : ""}
               </label>
@@ -183,7 +183,7 @@ if (!result.isConfirmed) return;
             </div>
 
             {kind !== "stopword" && (
-              <div className="space-y-1 flex-1">
+              <div className="space-y-1 flex-1 w-full md:w-auto">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">To</label>
                 <input
                   type="text"
@@ -196,7 +196,7 @@ if (!result.isConfirmed) return;
               </div>
             )}
 
-            <button type="submit" className="bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white text-white dark:text-gray-900 px-4 py-2.5 rounded-xl font-medium transition-colors flex items-center gap-2">
+            <button type="submit" className="w-full md:w-auto justify-center bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white text-white dark:text-gray-900 px-4 py-2.5 rounded-xl font-medium transition-colors flex items-center gap-2 h-[42px]">
               <Plus size={18} /> Add
             </button>
           </form>

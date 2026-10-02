@@ -79,9 +79,9 @@ export default function ComparePage() {
   return (
     <div className="space-y-8 animate-in fade-in pb-12">
         
-        <div className="flex justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Compare Submissions</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">Compare Submissions</h1>
             <p className="text-gray-500 mt-1">Side-by-side plagiarism and similarity analysis.</p>
           </div>
           <button onClick={() => window.history.back()} className="text-gray-500 hover:text-gray-900 dark:hover:text-white flex items-center gap-2">

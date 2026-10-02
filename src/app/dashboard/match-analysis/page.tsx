@@ -63,13 +63,13 @@ export default function MatchAnalysisPage() {
   return (
     <div className="space-y-8 animate-in fade-in pb-12">
         
-        <div className="flex flex-wrap gap-4 justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+        <div className="flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Match Analysis</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">Match Analysis</h1>
             <p className="text-gray-500 mt-1">Pool-level insights and cross-series similarity.</p>
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4 w-full xl:w-auto">
             <DropdownFilter
               value={scopeType}
               onChange={(val) => setScopeType(val)}
@@ -148,32 +148,45 @@ export default function MatchAnalysisPage() {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-x-auto">
-              <h2 className="text-xl font-bold mb-4">Series Domain Distribution</h2>
-              <table className="w-full text-sm text-left">
-                <thead className="text-xs text-gray-500 uppercase bg-gray-50 dark:bg-gray-900/50">
-                  <tr>
-                    <th className="px-4 py-3 rounded-tl-lg">Series</th>
-                    <th className="px-4 py-3 rounded-tr-lg">Domains & Counts</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
-                  {Object.entries(insights.seriesTags || {}).map(([series, tags]: [string, any]) => (
-                    <tr key={series}>
-                      <td className="px-4 py-4 font-bold">{series}</td>
-                      <td className="px-4 py-4">
-                        <div className="flex flex-wrap gap-2">
-                          {Object.entries(tags).sort((a: any, b: any) => b[1] - a[1]).map(([tag, count]) => (
-                            <span key={tag} className="bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 px-2 py-1 rounded">
-                              {tag}: {count as number}
-                            </span>
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+              <h2 className="text-xl font-bold mb-6">Series Domain Distribution</h2>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                {Object.entries(insights.seriesTags || {})
+                  .sort(([s1], [s2]) => s2.localeCompare(s1)) // Sort series descending
+                  .map(([series, tags]: [string, any]) => {
+                    const sortedTags = Object.entries(tags).sort((a: any, b: any) => b[1] - a[1]);
+                    const maxCount = Math.max(...sortedTags.map(([, c]) => c as number), 1);
+                    
+                    return (
+                      <div key={series} className="bg-gray-50 dark:bg-gray-900/50 rounded-xl p-5 border border-gray-100 dark:border-gray-800">
+                        <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+                          <h3 className="font-bold text-lg text-gray-900 dark:text-white">Series {series}</h3>
+                          <span className="text-xs font-semibold px-2 py-1 bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 rounded-md">
+                            {sortedTags.length} Domains
+                          </span>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          {sortedTags.map(([tag, count]: any) => (
+                            <div key={tag}>
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="font-medium text-gray-700 dark:text-gray-300 truncate pr-2">{tag}</span>
+                                <span className="text-gray-500 font-medium">{count}</span>
+                              </div>
+                              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden">
+                                <div 
+                                  className="bg-blue-500 dark:bg-blue-400 h-1.5 rounded-full" 
+                                  style={{ width: `${(count / maxCount) * 100}%` }}
+                                ></div>
+                              </div>
+                            </div>
                           ))}
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+                    );
+                })}
+              </div>
             </div>
 
           </div>
