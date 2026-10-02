@@ -154,9 +154,9 @@ export async function generateRoutinePdf(configs: any[], slots: any[], teachers:
     .bottom-section { display: flex; align-items: flex-start; width: 968pt; }
     .side-tables { display: flex; flex-direction: column; margin-left: 6pt; width: 294pt; }
     .side-note { text-align: right; font-size: 7.5pt; margin-bottom: 3pt; padding-right: 2pt; font-weight: bold; }
-    .side-row { display: flex; gap: 6pt; width: 100%; }
+    .side-row { display: flex; justify-content: space-between; width: 100%; }
     
-    table.side-table { width: 100%; font-size: 7.5pt; }
+    table.side-table { width: 49%; font-size: 7.5pt; }
     table.side-table th, table.side-table td { padding: 1.5pt 4pt; text-align: left; height: 12pt; }
     table.side-table thead th { text-align: center; font-weight: bold; }
     td.t-code { text-align: center; width: 28pt; font-weight: bold; }
