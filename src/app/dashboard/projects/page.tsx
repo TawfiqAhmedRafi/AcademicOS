@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import DropdownFilter from "@/app/components/DropdownFilter";
-import Pagination from "@/app/components/Pagination";
+import DropdownFilter from "../../components/DropdownFilter";
+import Pagination from "../../components/Pagination";
 import { Loader2, Search, Database, User } from "lucide-react";
 import { toast } from "react-hot-toast";
 

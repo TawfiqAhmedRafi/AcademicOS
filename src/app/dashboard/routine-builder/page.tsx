@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { Loader2, Plus, Calendar, Clock, MapPin, Users, X, Save, Trash2, AlertCircle } from "lucide-react";
-import { useToast } from "@/app/components/ToastProvider";
-import DropdownFilter from "@/app/components/DropdownFilter";
+import { useToast } from "../../components/ToastProvider";
+import DropdownFilter from "../../components/DropdownFilter";
 import Swal from "sweetalert2";
 
 const DAYS = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday"];

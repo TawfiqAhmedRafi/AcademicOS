@@ -3,9 +3,9 @@
 import { useState, useEffect } from "react";
 import { Plus, Trash, Check, X, RefreshCcw, Loader2 } from "lucide-react";
 import Navbar from "@/app/components/Navbar";
-import DropdownFilter from "@/app/components/DropdownFilter";
-import Pagination from "@/app/components/Pagination";
-import { useToast } from "@/app/components/ToastProvider";
+import DropdownFilter from "../../components/DropdownFilter";
+import Pagination from "../../components/Pagination";
+import { useToast } from "../../components/ToastProvider";
 import Swal from "sweetalert2";
 
 type Vocab = {

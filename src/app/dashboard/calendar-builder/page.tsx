@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, CalendarDays, Plus, Trash2, Save, Send, AlertCircle, Download, CheckCircle2 } from "lucide-react";
-import { useToast } from "@/app/components/ToastProvider";
+import { useToast } from "../../components/ToastProvider";
 import Swal from "sweetalert2";
 
 type ScheduleEvent = { id: string; description: string; from: string; to: string; duration: string };

@@ -1,9 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
+<<<<<<< HEAD
+import { Search, Loader2, UserMinus, GraduationCap, ArrowDownRight, XCircle } from "lucide-react";
+import { useToast } from "../../components/ToastProvider";
+import Pagination from "../../components/Pagination";
+=======
 import { Search, Loader2, UserMinus, GraduationCap, ArrowDownRight, XCircle, Filter } from "lucide-react";
 import { useToast } from "@/app/components/ToastProvider";
 import DropdownFilter from "@/app/components/DropdownFilter";
+>>>>>>> a9e8e4c82dc0efb15c014ef7fe7000722978438b
 import Swal from "sweetalert2";
 
 type Student = {

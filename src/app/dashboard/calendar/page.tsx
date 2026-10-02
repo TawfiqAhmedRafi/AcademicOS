@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, CalendarDays, Download, Clock } from "lucide-react";
-import { useToast } from "@/app/components/ToastProvider";
+import { useToast } from "../../components/ToastProvider";
 
 export default function StudentCalendarPage() {
   const [data, setData] = useState<any>(null);

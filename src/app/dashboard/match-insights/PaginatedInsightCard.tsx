@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Pagination from "@/app/components/Pagination";
+import Pagination from "../../components/Pagination";
 
 type DataItem = {
   _id: string | string[];

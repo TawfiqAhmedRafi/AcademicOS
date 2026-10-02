@@ -13,8 +13,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
-import { useToast } from "@/app/components/ToastProvider";
-import Pagination from "@/app/components/Pagination";
+import { useToast } from "../../components/ToastProvider";
+import Pagination from "../../components/Pagination";
 import Swal from "sweetalert2";
 
 type User = {
