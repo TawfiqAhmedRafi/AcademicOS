@@ -42,6 +42,7 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
     { name: "My Classes", href: "/dashboard/classes", icon: Briefcase },
     { name: "Upload Marks", href: "/dashboard/marks", icon: UploadCloud },
     { name: "Similarity Checks", href: "/dashboard/similarity", icon: ShieldAlert },
+    { name: "Projects & Thesis", href: "/dashboard/projects", icon: Database },
   ];
 
   const advisorLinks = [
