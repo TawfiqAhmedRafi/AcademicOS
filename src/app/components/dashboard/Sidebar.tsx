@@ -6,10 +6,12 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { 
-  LayoutDashboard, BookOpen, FileText, GraduationCap, Calendar, 
-  UploadCloud, ShieldAlert, Users, CheckSquare, Network, 
-  Database, UserCog, LogOut, Briefcase, Sun, Moon,
-  Calculator, CalendarDays, Settings // <-- ADDED Settings
+  LayoutDashboard, BookPlus, History, ClipboardEdit, CalendarDays, 
+  GraduationCap, CalendarClock, Settings, Presentation, FileUp, Users, Calculator, ClipboardCheck, 
+  CalendarPlus, DatabaseZap, Network, CalendarRange, FileCheck, 
+  IdCard, BookType, LineChart, Activity, UserCog, ShieldCheck, 
+  ScrollText, LogOut, Sun, Moon,
+  Database
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -26,48 +28,47 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
   useEffect(() => setMounted(true), []);
   const currentTheme = theme === "system" ? systemTheme : theme;
 
-  const studentLinks = [
+const studentLinks = [
     { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
-    { name: "Course Registration", href: "/dashboard/registration", icon: BookOpen },
-    { name: "Backlog Registration", href: "/dashboard/backlog-registration", icon: ShieldAlert },
-    { name: "Form Fill-up", href: "/dashboard/form-fillup", icon: FileText },
+    { name: "Course Registration", href: "/dashboard/registration", icon: BookPlus },
+    { name: "Backlog Registration", href: "/dashboard/backlog-registration", icon: History },
+    { name: "Form Fill-up", href: "/dashboard/form-fillup", icon: ClipboardEdit },
     { name: "Academic Calendar", href: "/dashboard/calendar", icon: CalendarDays },
     { name: "Academic Results", href: "/dashboard/results", icon: GraduationCap },
-    { name: "Class Routine", href: "/dashboard/routine", icon: Calendar },
+    { name: "Class Routine", href: "/dashboard/routine", icon: CalendarClock },
     { name: "Settings", href: "/dashboard/settings", icon: Settings },
   ];
 
   const facultyBaseLinks = [
     { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
-    { name: "My Classes", href: "/dashboard/classes", icon: Briefcase },
-    { name: "Upload Marks", href: "/dashboard/marks", icon: UploadCloud },
-    { name: "Similarity Checks", href: "/dashboard/similarity", icon: ShieldAlert },
+    { name: "My Classes", href: "/dashboard/classes", icon: Presentation },
+    { name: "Upload Marks", href: "/dashboard/marks", icon: FileUp },
     { name: "Projects & Thesis", href: "/dashboard/projects", icon: Database },
   ];
 
   const advisorLinks = [
     { name: "Series Roster", href: "/dashboard/roster", icon: Users },
     { name: "Result Engine", href: "/dashboard/tabulation", icon: Calculator },
-    { name: "Pending Approvals", href: "/dashboard/approvals", icon: CheckSquare },
-    { name: "Academic Calendar Builder", href: "/dashboard/calendar-builder", icon: CalendarDays },
-    { name: "Match Imports", href: "/dashboard/match-import", icon: Database },
+    { name: "Pending Approvals", href: "/dashboard/approvals", icon: ClipboardCheck },
+    { name: "Academic Calendar Builder", href: "/dashboard/calendar-builder", icon: CalendarPlus },
+    { name: "Match Imports", href: "/dashboard/match-import", icon: DatabaseZap },
   ];
 
   const deptHeadLinks = [
     { name: "Series Manager", href: "/dashboard/series-manager", icon: Network },
-    { name: "Routine Builder", href: "/dashboard/routine-builder", icon: BookOpen },
-    { name: "Result Approvals", href: "/dashboard/head-results", icon: CheckSquare },
-    { name: "Student Directory", href: "/dashboard/student-mgmt", icon: Users }
+    { name: "Routine Builder", href: "/dashboard/routine-builder", icon: CalendarRange },
+    { name: "Result Approvals", href: "/dashboard/head-results", icon: FileCheck },
+    { name: "Student Directory", href: "/dashboard/student-mgmt", icon: IdCard }
   ];
 
   const adminLinks = [
     { name: "System Overview", href: "/dashboard", icon: LayoutDashboard },
-    { name: "Match Vocabulary", href: "/dashboard/match-vocab", icon: BookOpen },
-    { name: "Match Analysis", href: "/dashboard/match-analysis", icon: Database },
-    { name: "Match Telemetry", href: "/dashboard/match-insights", icon: FileText },
+    { name: "Match Vocabulary", href: "/dashboard/match-vocab", icon: BookType },
+    { name: "Match Analysis", href: "/dashboard/match-analysis", icon: LineChart },
+    { name: "Match Telemetry", href: "/dashboard/match-insights", icon: Activity },
     { name: "Faculty Management", href: "/dashboard/faculty-mgmt", icon: UserCog },
-    { name: "User Management", href: "/dashboard/user-mgmt", icon: ShieldAlert },
-    { name: "System Logs", href: "/dashboard/logs", icon: Database },
+    { name: "User Management", href: "/dashboard/user-mgmt", icon: ShieldCheck },
+    { name: "System Logs", href: "/dashboard/logs", icon: ScrollText },
   ];
 
   const displayAdminLinks = user.role === "admin" 
