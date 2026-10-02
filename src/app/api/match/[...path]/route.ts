@@ -93,7 +93,7 @@ async function handleProxy(req: Request, { params }: { params: { path: string[] 
     
     includePeople = bodyData.type === "project" ? policy.project : policy.thesis;
     bodyData.includePeople = includePeople;
-    logSystemAction("Audit", session.user.id, `Search Match - Scope: ${bodyData.type} ${bodyData.course || ''}, QueryLen: ${qlen}`);
+    logSystemAction(`Search Match`, "Audit", `Scope: ${bodyData.type} ${bodyData.course || ''}, QueryLen: ${qlen}, By: ${session.user.id}`);
   } else if (endpoint.startsWith("similar/")) {
     includePeople = policy.project || policy.thesis; 
     url.searchParams.set("includePeople", String(includePeople));
@@ -110,7 +110,7 @@ async function handleProxy(req: Request, { params }: { params: { path: string[] 
       const db = await getDb();
       await db.collection("matchlogs").updateOne(
         { _id: new ObjectId(bodyData.logId) },
-        { $push: { clicks: { itemId: bodyData.itemId, rank: bodyData.rank, ts: new Date() } } }
+        { $push: { clicks: { itemId: bodyData.itemId, rank: bodyData.rank, ts: new Date() } } as any }
       );
       return NextResponse.json({ ok: true });
     } catch (e: any) {
