@@ -73,37 +73,6 @@ export async function generateTabulationPdf(draft: any): Promise<Buffer> {
   </body>
   </html>`;
 
-  let browser;
-  if (process.env.NODE_ENV === "development") {
-    const puppeteer = (await import("puppeteer")).default;
-    browser = await puppeteer.launch({ 
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-      channel: "chrome" 
-    });
-  } else {
-    const chromium = (await import("@sparticuz/chromium")).default as any;
-    const puppeteerCore = (await import("puppeteer-core")).default;
-    browser = await puppeteerCore.launch({
-      args: chromium.args,
-      defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath(),
-      headless: chromium.headless,
-    });
-  }
-
-  try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" as any });
-    
-    const pdfBytes = await page.pdf({
-      format: "A4",
-      landscape: false,
-      printBackground: true,
-      margin: { top: "0in", right: "0in", bottom: "0in", left: "0in" },
-    });
-    return Buffer.from(pdfBytes);
-  } finally {
-    if (browser) await browser.close();
-  }
+  const { renderPdfViaService } = await import("./pdf-client");
+  return renderPdfViaService(html);
 }
