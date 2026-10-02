@@ -63,10 +63,10 @@ export async function POST(req: Request) {
         createdAt: new Date(),
       });
       resultId = res.insertedId;
-      logSystemAction("System", session.user.id, `Create Vocab - Kind: ${kind}, From: ${cleanFrom}`);
+      logSystemAction(`Create Vocab`, "System", `Kind: ${kind}, From: ${cleanFrom}, By: ${session.user.id}`);
     } else {
       await db.collection("matchvocab").updateOne({ _id: new ObjectId(item._id) }, { $set: doc });
-      logSystemAction("System", session.user.id, `Update Vocab - ID: ${item._id}`);
+      logSystemAction(`Update Vocab`, "System", `ID: ${item._id}, By: ${session.user.id}`);
     }
     
     return NextResponse.json({ ok: true, id: resultId });
@@ -74,7 +74,7 @@ export async function POST(req: Request) {
 
   if (action === "delete") {
     await db.collection("matchvocab").deleteOne({ _id: new ObjectId(item._id) });
-    logSystemAction("System", session.user.id, `Delete Vocab - ID: ${item._id}`);
+    logSystemAction(`Delete Vocab`, "System", `ID: ${item._id}, By: ${session.user.id}`);
     return NextResponse.json({ ok: true });
   }
 
