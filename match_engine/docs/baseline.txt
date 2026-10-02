@@ -1,0 +1,60 @@
+AOS Match Baseline — 2026-10-02 17:02:14
+============================================================
+
+===== pytest -q tests =====
+...........                                                              [100%]
+============================== warnings summary ===============================
+C:\Users\Fast\AppData\Roaming\Python\Python314\site-packages\fastapi\testclient.py:1
+  C:\Users\Fast\AppData\Roaming\Python\Python314\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+11 passed, 1 warning in 3.78s
+
+===== evaluate.py output =====
+query                                    #rel   P@k  R@10  first-miss
+fingerprint attendance                      2  1.00  1.00  Biometric Access Control System
+LoRa emergency message                      3  1.00  1.00  SafeDrive: Smart Drowsiness Detection 
+voice communication with esp32              1  1.00  1.00  Wireless Audio Transmission By Using L
+solar tracker                               3  1.00  1.00  Smart Solar Inverter System for Sustai
+fire fighting robot                         5  0.80  1.00  Integrated Fire, Gas, and Dust Monitor
+smart parking                               2  1.00  1.00  Self-Driving Car Using Computer Vision
+gas leakage detection                       2  0.50  1.00  Accident Identification and Theft Dete
+agriculture rover plough seed               4  0.75  0.75  Design and Development of a Solar-Powe
+wheelchair gesture control                  6  1.00  1.00  -
+water level monitoring                      6  0.80  1.00  Smart Saline monitoring
+blood donation platform                     5  1.00  1.00  -
+attendance system                           9  1.00  0.89  -
+resume builder web application              4  0.75  1.00  Design and Implimentation of Full-Stac
+speech emotion machine learning             1  1.00  1.00  Fake News Detection Using Machine Lear
+alumni portal                               3  0.67  1.00  RUET CareerConnect:
+e-commerce marketplace booking              7  0.80  1.00  RUET Smart Bookstore : A Machine Learn
+autism                                      2  1.00  1.00  A Two-Stage Regime-Aware Machine Learn
+metamaterial absorber                       9  1.00  1.00  -
+rice leaf disease                           3  1.00  1.00  Enhanced Lightweight Custom CNN Model 
+patch antenna                              14  1.00  0.90  -
+inverter                                    6  1.00  1.00  -
+skin lesion classification                  6  1.00  0.83  -
+lung cancer detection deep learning         3  0.67  0.67  Improving Diabetic Retinopathy Detecti
+solar cell perovskite                      15  1.00  1.00  -
+handwritten character recognition           6  1.00  1.00  -
+bone fracture x-ray                         3  0.67  0.67  Design of a 4x4 MIMO Antenna with Meta
+
+Mean P@min(5,#rel) = 0.90   Mean R@10 = 0.95   MRR = 1.00
+
+Score of RELEVANT items:   median 0.64  10th pct 0.22  25th 0.37
+Score of NON-relevant:     median 0.04  75th pct 0.13  90th 0.23
+
+Precision if you show only items with score >= t :
+  t=0.15  precision=0.33  kept 117/126 relevant
+  t=0.20  precision=0.43  kept 113/126 relevant
+  t=0.25  precision=0.57  kept 111/126 relevant
+  t=0.30  precision=0.73  kept 101/126 relevant
+  t=0.35  precision=0.84  kept 97/126 relevant
+  t=0.40  precision=0.95  kept 93/126 relevant
+  t=0.45  precision=0.98  kept 89/126 relevant
+  t=0.50  precision=1.00  kept 84/126 relevant
+  t=0.55  precision=1.00  kept 79/126 relevant
+  t=0.60  precision=1.00  kept 71/126 relevant
+
+PASS  QUALITY GATE PASSED

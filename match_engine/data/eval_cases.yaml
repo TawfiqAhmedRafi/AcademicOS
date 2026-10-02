@@ -1,0 +1,11 @@
+- query: "solar panel cleaning robot"
+  expected_ids: ["22-101", "22-105"]
+  expected_band: "Very similar"
+
+- query: "rfid attendance system"
+  expected_ids: ["22-110"]
+  expected_band: "Very similar"
+
+- query: "autism detection using deep learning"
+  expected_ids: ["22-120"]
+  expected_band: "Related"

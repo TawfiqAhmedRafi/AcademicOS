@@ -1,0 +1,41 @@
+name: AOS Match CI
+
+on:
+  push:
+    paths: ["match_engine/**"]
+  pull_request:
+    paths: ["match_engine/**"]
+
+defaults:
+  run:
+    working-directory: match_engine
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    name: Tests + Quality Gate
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: match_engine/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Import data (Excel → JSON)
+        run: python -m aos_match.importer
+
+      - name: Run tests
+        run: python -m pytest -q tests
+
+      - name: Quality evaluation (--check gates)
+        run: |
+          python -m aos_match.evaluate --check \
+            --min-pk  0.88 \
+            --min-r10 0.93 \
+            --min-mrr 0.95
