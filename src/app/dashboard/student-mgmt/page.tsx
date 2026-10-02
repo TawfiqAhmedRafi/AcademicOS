@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Search, Loader2, UserMinus, GraduationCap, ArrowDownRight, XCircle } from "lucide-react";
 import { useToast } from "@/app/components/ToastProvider";
+import Pagination from "@/app/components/Pagination";
 import Swal from "sweetalert2";
 
 type Student = {
@@ -22,6 +23,10 @@ export default function StudentManagementPage() {
   const [dropModal, setDropModal] = useState<Student | null>(null);
   const [newSeries, setNewSeries] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 60;
 
   const { showToast } = useToast();
 
@@ -81,6 +86,16 @@ if (!result.isConfirmed) return;
     s.series.includes(search)
   );
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
+  const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
+  const currentStudents = filteredStudents.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       <div className="mb-8">
@@ -119,7 +134,7 @@ if (!result.isConfirmed) return;
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                {filteredStudents.map(student => {
+                {currentStudents.map(student => {
                   const roll = student.studentId || student.email.split('@')[0];
                   return (
                     <tr key={student._id} className="transition-colors hover:bg-slate-50/50 dark:hover:bg-white/5">
@@ -146,6 +161,16 @@ if (!result.isConfirmed) return;
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+        
+        {!isLoading && filteredStudents.length > 0 && (
+          <div className="p-4 border-t border-slate-200 dark:border-white/10">
+            <Pagination 
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
           </div>
         )}
       </div>

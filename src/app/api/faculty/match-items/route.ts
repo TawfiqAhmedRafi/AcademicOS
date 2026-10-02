@@ -43,19 +43,37 @@ export async function GET(req: Request) {
 
     // Name Hydration
     if (items.length > 0) {
-      const userCache = new Map();
+      const rollsToFetch = new Set<string>();
+      
+      // 1. Collect all unique missing rolls
       for (const res of items) {
         if (!res.studentName && (!res.memberNames || res.memberNames.length === 0)) {
            if (res.members && res.members.length > 0) {
-              res.memberNames = [];
               for (const roll of res.members) {
-                 if (!userCache.has(roll)) {
-                    const u = await db.collection("users").findOne({ student_id: roll }, { projection: { name: 1 } });
-                    userCache.set(roll, u ? u.name : null);
-                 }
-                 const n = userCache.get(roll);
-                 res.memberNames.push(n || "");
+                 rollsToFetch.add(roll);
               }
+           }
+        }
+      }
+
+      // 2. Fetch all missing names in a single query
+      const userCache = new Map<string, string>();
+      if (rollsToFetch.size > 0) {
+         const users = await db.collection("users").find(
+            { student_id: { $in: Array.from(rollsToFetch) } },
+            { projection: { student_id: 1, name: 1 } }
+         ).toArray();
+         
+         for (const u of users) {
+            userCache.set(u.student_id, u.name);
+         }
+      }
+
+      // 3. Hydrate the items
+      for (const res of items) {
+        if (!res.studentName && (!res.memberNames || res.memberNames.length === 0)) {
+           if (res.members && res.members.length > 0) {
+              res.memberNames = res.members.map((roll: string) => userCache.get(roll) || "");
            }
         }
       }
