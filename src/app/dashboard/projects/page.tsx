@@ -31,9 +31,7 @@ export default function ProjectsThesisPage() {
       .then((res) => res.json())
       .then((data) => {
         let type = "project";
-        let course = "";
-        if (target === "2200") course = "ETE2200";
-        if (target === "3200") course = "ETE3200";
+        let course = target; // "2200" or "3200"
         if (target === "thesis") type = "thesis";
         
         let found = [];
@@ -41,8 +39,11 @@ export default function ProjectsThesisPage() {
            const scope = data.find((d: any) => d.type === "thesis");
            if (scope) found = scope.series;
         } else {
-           // match engine course uses "2200" instead of "ETE2200"
-           const scope = data.find((d: any) => d.type === "project" && d.course === target);
+           // Try matching both "2200" and "ETE2200" formats
+           const scope = data.find((d: any) => 
+             d.type === "project" && 
+             (d.course === target || d.course === `ETE${target}` || d.course === `ETE ${target}`)
+           );
            if (scope) found = scope.series;
         }
         setAvailableSeries(found);
