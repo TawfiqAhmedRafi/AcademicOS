@@ -1,5 +1,5 @@
 import Link from "next/link";
-import {  Mail, Globe } from "lucide-react";
+import {  Mail, Globe, Download } from "lucide-react";
 
 export default function Footer() {
   return (
@@ -21,6 +21,16 @@ export default function Footer() {
               <a href="https://www.ete.ruet.ac.bd/" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-ruet-blue dark:hover:text-ruet-gold"><Globe size={20} /></a>
               <a href="https://mail.google.com/mail/?view=cm&fs=1&to=rafi70722@gmail.com" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-ruet-blue dark:hover:text-ruet-gold"><Mail size={20} /></a>
             </div>
+
+            <a 
+              href="https://drive.google.com/file/d/1BgCzIb9MSU14T16IA7rDIpq4KtqJvXJA/view?usp=sharing" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-ruet-blue dark:bg-white dark:text-black dark:hover:bg-ruet-gold"
+            >
+              <Download size={16} />
+              Download for Windows
+            </a>
           </div>
 
           {/* Product Links */}

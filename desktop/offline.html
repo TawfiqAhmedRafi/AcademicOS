@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; img-src file: data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Academic OS</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; display: flex; align-items: center; justify-content: center;
+      font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; color: #f8fafc;
+      background: radial-gradient(circle at 20% 20%, #0b4a73 0%, #002B49 45%, #020617 100%);
+      user-select: none;
+    }
+    .card {
+      text-align: center; padding: 40px 36px; max-width: 420px; margin: 24px;
+      background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 24px; backdrop-filter: blur(14px); box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    }
+    img { width: 84px; height: 84px; margin-bottom: 18px; }
+    h1 { margin: 0 0 8px; font-size: 1.5rem; }
+    p { margin: 0 0 8px; color: #cbd5e1; line-height: 1.5; }
+    .reason { font-size: 0.8rem; color: #94a3b8; margin-bottom: 24px; min-height: 1em; }
+    button {
+      cursor: pointer; border: 0; border-radius: 12px; padding: 12px 30px; font-size: 1rem; font-weight: 600;
+      color: #002B49; background: #F59E0B; transition: transform .15s ease, box-shadow .15s ease;
+    }
+    button:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(245,158,11,0.4); }
+    button:disabled { opacity: .7; cursor: default; transform: none; box-shadow: none; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <img src="assets/icon.png" alt="Academic OS logo" />
+    <h1>Can't reach Academic OS</h1>
+    <p>Check your internet connection. The app will reconnect automatically.</p>
+    <div class="reason" id="reason"></div>
+    <button id="retry" type="button">Try again</button>
+  </main>
+  <script>
+    (function () {
+      var params = new URLSearchParams(location.search);
+      var retry = params.get("retry") || "";
+      if (!/^https?:\/\//i.test(retry)) retry = ""; // only ever navigate to http(s)
+      var reason = params.get("reason");
+      if (reason) document.getElementById("reason").textContent = reason;
+
+      var btn = document.getElementById("retry");
+      function go() {
+        if (!retry) return;
+        btn.disabled = true;
+        btn.textContent = "Connecting…";
+        location.href = retry;
+      }
+      btn.addEventListener("click", go);
+      window.addEventListener("online", go);
+    })();
+  </script>
+</body>
+</html>
