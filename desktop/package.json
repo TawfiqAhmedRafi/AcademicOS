@@ -1,0 +1,52 @@
+{
+  "name": "academicos-desktop",
+  "productName": "Academic OS",
+  "version": "1.0.0",
+  "description": "Academic OS desktop app",
+  "author": "Academic OS",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "bd.ac.ruet.ete.academicos",
+    "productName": "Academic OS",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "offline.html",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Academic OS",
+      "uninstallDisplayName": "Academic OS",
+      "artifactName": "AcademicOS-Setup-${version}.${ext}"
+    }
+  },
+  "devDependencies": {
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3"
+  }
+}
