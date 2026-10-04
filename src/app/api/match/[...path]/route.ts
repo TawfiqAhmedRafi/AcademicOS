@@ -3,6 +3,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { logSystemAction } from "@/lib/logger";
 
+// Reindex rebuilds all TF-IDF/LSA indexes on the engine (~18s+); allow the function to run that long.
+export const maxDuration = 60;
+
 const MATCH_URL = process.env.MATCH_URL || "http://127.0.0.1:8001/match";
 const MATCH_API_KEY = process.env.MATCH_API_KEY || "testkey";
 
@@ -136,7 +139,9 @@ async function handleProxy(req: Request, { params }: { params: { path: string[] 
   if (bodyData) fetchOptions.body = JSON.stringify(bodyData);
 
   try {
-    const response = await fetchWithTimeout(url.toString(), fetchOptions, 10000);
+    // Reindex is slow (full index rebuild); keep it under maxDuration. Everything else stays at 10s.
+    const timeoutMs = isReindex ? 55000 : 10000;
+    const response = await fetchWithTimeout(url.toString(), fetchOptions, timeoutMs);
     const text = await response.text();
     let data;
     try { data = JSON.parse(text); } catch { return NextResponse.json({ error: "Invalid JSON from search engine" }, { status: 502 }); }
