@@ -38,10 +38,21 @@ function calculateCTMarks(ctMarksArray: number[]) {
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.advising_series) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  if (!session?.user?.advising_series && session?.user?.role !== "dept_head") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
 
   try {
     const { series, semester, isBacklog } = await req.json();
+
+    const advisingSeriesList = session.user.advising_series?.split(",").map((s: string) => s.trim()) || [];
+    const isSeriesAdvisor = advisingSeriesList.includes(String(series));
+    const isDeptHead = session.user.role === "dept_head";
+
+    if (!isSeriesAdvisor && !isDeptHead) {
+      return NextResponse.json({ error: "Forbidden. You do not advise this series." }, { status: 403 });
+    }
+
     const client = await clientPromise;
     const db = client.db("academicos");
 
@@ -99,9 +110,6 @@ export async function POST(req: Request) {
         const continuousUploads = studentUploads.filter(u => !u.segment.includes("Final") && !u.segment.includes("Viva") && !u.segment.includes("Defense") && !u.segment.includes("Showcase"));
         const terminalUploads = studentUploads.filter(u => u.segment.includes("Final") || u.segment.includes("Viva") || u.segment.includes("Defense") || u.segment.includes("Showcase"));
 
-        let courseTotal = 0;
-        let ctMarksCollector: number[] = [];
-
         const latestContinuous: Record<string, any> = {};
         continuousUploads.forEach(u => {
             const key = `${u.segment}_${u.teacherEmail}`;
@@ -110,54 +118,146 @@ export async function POST(req: Request) {
             }
         });
 
-        Object.values(latestContinuous).forEach((upload: any) => {
-            const mData = upload.marks.find((m:any) => m.roll === roll);
+        const sortedTerminal = terminalUploads.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+        const latestTerminal: Record<string, any> = {};
+        if (processingBacklog && sortedTerminal.length > 0) {
+            const backlogPeriodDate = new Date(sortedTerminal[0].uploadedAt);
+            const validTerminalUploads = sortedTerminal.filter(u => 
+                (backlogPeriodDate.getTime() - new Date(u.uploadedAt).getTime()) < (30 * 24 * 60 * 60 * 1000) 
+            );
+            validTerminalUploads.forEach(u => {
+                const key = `${u.segment}_${u.teacherEmail}`;
+                if (!latestTerminal[key] || new Date(u.uploadedAt) > new Date(latestTerminal[key].uploadedAt)) latestTerminal[key] = u;
+            });
+        } else {
+            sortedTerminal.forEach(u => {
+                const key = `${u.segment}_${u.teacherEmail}`;
+                if (!latestTerminal[key] || new Date(u.uploadedAt) > new Date(latestTerminal[key].uploadedAt)) latestTerminal[key] = u;
+            });
+        }
+
+        // Collect all distinct uploaded segments for this student
+        const segmentMarks: Record<string, number> = {};
+        let ctMarksCollector: number[] = [];
+
+        const allUploads = { ...latestContinuous, ...latestTerminal };
+        Object.values(allUploads).forEach((upload: any) => {
+            const mData = upload.marks.find((m: any) => m.roll === roll);
+            if (!mData) return;
+
             if (upload.segment.includes("Class Tests")) {
                 if (mData.ct1 !== undefined) ctMarksCollector.push(mData.ct1);
                 if (mData.ct2 !== undefined) ctMarksCollector.push(mData.ct2);
                 if (mData.ct3 !== undefined) ctMarksCollector.push(mData.ct3);
                 if (mData.ct4 !== undefined) ctMarksCollector.push(mData.ct4);
             } else {
-                courseTotal += mData.mark || 0;
+                segmentMarks[upload.segment] = Number(mData.mark || 0);
             }
         });
 
-        courseTotal += calculateCTMarks(ctMarksCollector);
+        // Determine Course Type
+        const codeUpper = (course.courseCode || "").toUpperCase();
+        const courseTitle = course.title || "";
+        const lastDigit = course.courseCode ? parseInt(course.courseCode.trim().slice(-1), 10) : NaN;
 
-        const sortedTerminal = terminalUploads.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-        
-        if (processingBacklog && sortedTerminal.length > 0) {
-            const backlogPeriodDate = new Date(sortedTerminal[0].uploadedAt);
-            const validTerminalUploads = sortedTerminal.filter(u => 
-                (backlogPeriodDate.getTime() - new Date(u.uploadedAt).getTime()) < (30 * 24 * 60 * 60 * 1000) 
-            );
-            
-            const latestTerminal: Record<string, any> = {};
-            validTerminalUploads.forEach(u => {
-                const key = `${u.segment}_${u.teacherEmail}`;
-                if (!latestTerminal[key] || new Date(u.uploadedAt) > new Date(latestTerminal[key].uploadedAt)) latestTerminal[key] = u;
-            });
-
-            Object.values(latestTerminal).forEach((upload: any) => {
-                courseTotal += upload.marks.find((m:any) => m.roll === roll).mark || 0;
-            });
-
+        let courseType: "theory" | "lab" | "project" | "thesis" | "seminar" = "theory";
+        if (codeUpper.includes("2200") || codeUpper.includes("3200") || courseTitle.toLowerCase().includes("project")) {
+            courseType = "project";
+        } else if (codeUpper.includes("3218") || courseTitle.toLowerCase().includes("seminar")) {
+            courseType = "seminar";
+        } else if (codeUpper.includes("4100") || codeUpper.includes("4200") || courseTitle.toLowerCase().includes("thesis")) {
+            courseType = "thesis";
+        } else if (course.type === "theory" || (!isNaN(lastDigit) && lastDigit % 2 !== 0)) {
+            courseType = "theory";
         } else {
-            const latestTerminal: Record<string, any> = {};
-            sortedTerminal.forEach(u => {
-                const key = `${u.segment}_${u.teacherEmail}`;
-                if (!latestTerminal[key] || new Date(u.uploadedAt) > new Date(latestTerminal[key].uploadedAt)) latestTerminal[key] = u;
+            courseType = "lab";
+        }
+
+        let courseTotal = 0;
+        let breakdown: any = {};
+
+        if (courseType === "theory") {
+            const attendance = segmentMarks["Attendance"] ?? 0;
+            const ctAvg = calculateCTMarks(ctMarksCollector);
+            const assignment = segmentMarks["Assignment"] ?? segmentMarks["Quizzes/Assignments"] ?? 0;
+            
+            // Sum of semester final parts (Section A, Section B, or Full)
+            let semesterFinal = 0;
+            Object.entries(segmentMarks).forEach(([seg, val]) => {
+                if (seg.toLowerCase().includes("final")) semesterFinal += val;
             });
-            Object.values(latestTerminal).forEach((upload: any) => {
-                courseTotal += upload.marks.find((m:any) => m.roll === roll).mark || 0;
-            });
+
+            courseTotal = attendance + ctAvg + assignment + semesterFinal;
+            breakdown = {
+                attendance,
+                ctAvg,
+                assignment,
+                semesterFinal
+            };
+        } else if (courseType === "lab") {
+            const attendance = segmentMarks["Attendance"] ?? 0;
+            const quiz = segmentMarks["Quiz"] ?? 0;
+            const report = segmentMarks["Lab Report"] ?? 0;
+            const performance = segmentMarks["Performance"] ?? 0;
+            const labViva = segmentMarks["Lab Viva"] ?? 0;
+            const labFinal = segmentMarks["Lab Final"] ?? 0;
+            const assessment = report + performance + labViva + labFinal;
+            const boardViva = segmentMarks["Board Viva"] ?? 0;
+
+            courseTotal = attendance + quiz + assessment + boardViva;
+            breakdown = {
+                attendance,
+                quiz,
+                assessment,
+                report,
+                performance,
+                labViva,
+                labFinal,
+                boardViva
+            };
+        } else if (courseType === "project") {
+            const supervisor = segmentMarks["Supervisor"] ?? 0;
+            const showcase = segmentMarks["Showcase"] ?? 0;
+            const boardViva = segmentMarks["Board Viva"] ?? 0;
+
+            courseTotal = supervisor + showcase + boardViva;
+            breakdown = {
+                supervisor,
+                showcase,
+                boardViva
+            };
+        } else if (courseType === "thesis") {
+            const supervisor = segmentMarks["Supervisor"] ?? 0;
+            const defense = segmentMarks["Defense"] ?? segmentMarks["Pre Defense"] ?? 0;
+            const boardViva = segmentMarks["Board Viva"] ?? 0;
+
+            courseTotal = supervisor + defense + boardViva;
+            breakdown = {
+                supervisor,
+                defense,
+                boardViva
+            };
+        } else if (courseType === "seminar") {
+            const supervisor = segmentMarks["Supervisor"] ?? 0;
+            const seminar1 = segmentMarks["Seminar 1"] ?? 0;
+            const seminar2 = segmentMarks["Seminar 2"] ?? 0;
+
+            courseTotal = supervisor + seminar1 + seminar2;
+            breakdown = {
+                supervisor,
+                seminar1,
+                seminar2
+            };
         }
 
         const gradeScale = getGradeScale(courseTotal, processingBacklog);
-        const resultObj = {
+        const resultObj: any = {
           courseCode: course.courseCode,
+          courseTitle: course.title,
           credits: course.credits,
-          totalMarks: courseTotal,
+          courseType,
+          breakdown,
+          totalMarks: Number(courseTotal.toFixed(2)),
           letterGrade: gradeScale.letter,
           gradePoint: gradeScale.point,
           isBacklog: processingBacklog
@@ -239,13 +339,23 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session || !["advisor", "dept_head"].includes(session.user.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  if (!session?.user?.advising_series && session?.user?.role !== "dept_head") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
 
   try {
     const { searchParams } = new URL(req.url);
     const series = searchParams.get("series");
     let semester = searchParams.get("semester");
     const isBacklog = searchParams.get("isBacklog") === "true";
+
+    const advisingSeriesList = session.user.advising_series?.split(",").map((s: string) => s.trim()) || [];
+    const isSeriesAdvisor = advisingSeriesList.includes(String(series));
+    const isDeptHead = session.user.role === "dept_head";
+
+    if (!isSeriesAdvisor && !isDeptHead) {
+      return NextResponse.json({ error: "Forbidden. You do not advise this series." }, { status: 403 });
+    }
 
     if (isBacklog) semester = `Backlogs_${semester}`;
 
@@ -261,11 +371,23 @@ export async function GET(req: Request) {
 
 export async function PATCH(req: Request) {
   const session = await getServerSession(authOptions);
-  if (session?.user?.role !== "advisor") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  if (!session?.user?.advising_series && session?.user?.role !== "dept_head") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
 
   try {
-    const { series, action, isBacklog } = await req.json();
-    let { semester } = await req.json();
+    const body = await req.json();
+    const { series, action, isBacklog } = body;
+    let { semester } = body;
+
+    const advisingSeriesList = session.user.advising_series?.split(",").map((s: string) => s.trim()) || [];
+    const isSeriesAdvisor = advisingSeriesList.includes(String(series));
+    const isDeptHead = session.user.role === "dept_head";
+
+    if (!isSeriesAdvisor && !isDeptHead) {
+      return NextResponse.json({ error: "Forbidden. You do not advise this series." }, { status: 403 });
+    }
+
     if (isBacklog) semester = `Backlogs_${semester}`;
 
     const client = await clientPromise;
