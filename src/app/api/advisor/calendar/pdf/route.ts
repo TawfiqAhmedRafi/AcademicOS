@@ -9,13 +9,28 @@ export const runtime = "nodejs";
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   
-  // FIX: Check for advising_series, because their actual role is "faculty" or "dept_head"
-  if (!session?.user?.advising_series) {
+  // Allow advising_series or dept_head
+  if (!session?.user?.advising_series && session?.user?.role !== "dept_head") {
     return new NextResponse("Unauthorized", { status: 403 });
   }
 
   try {
-    const series = session.user.advising_series.split(",")[0].trim();
+    const isDeptHead = session.user.role === "dept_head";
+    const advisingSeriesList = session.user.advising_series?.split(",").map((s: string) => s.trim()) || [];
+    const { searchParams } = new URL(req.url);
+    const requestedSeries = searchParams.get("series");
+
+    let series = advisingSeriesList[0] || "";
+    if (requestedSeries && (isDeptHead || advisingSeriesList.includes(requestedSeries))) {
+      series = requestedSeries;
+    }
+
+    if (!series && isDeptHead) {
+      const client = await clientPromise;
+      const db = client.db("academicos");
+      const activeSeries = await db.collection("series").findOne({ status: "active" }, { sort: { series: -1 } });
+      series = activeSeries?.series || "";
+    }
     const client = await clientPromise;
     const db = client.db("academicos");
     

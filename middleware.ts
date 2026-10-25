@@ -10,10 +10,18 @@ export default withAuth(
 
     // Define protected path prefixes for each role tier
     const studentRoutes = ["/dashboard/registration", "/dashboard/form-fillup", "/dashboard/results", "/dashboard/backlog-registration", "/dashboard/calendar", "/dashboard/routine"];
-    const facultyRoutes = ["/dashboard/classes", "/dashboard/marks", "/dashboard/similarity"];
-    const advisorRoutes = ["/dashboard/roster", "/dashboard/approvals", "/dashboard/calendar-builder", "/dashboard/tabulation"];
+    const facultyRoutes = ["/dashboard/classes", "/dashboard/marks", "/dashboard/projects"];
+    const advisorRoutes = ["/dashboard/roster", "/dashboard/approvals", "/dashboard/calendar-builder", "/dashboard/tabulation", "/dashboard/match-import"];
     const headRoutes = ["/dashboard/series-manager", "/dashboard/student-mgmt", "/dashboard/head-results", "/dashboard/routine-builder"];
-    const adminRoutes = ["/dashboard/faculty-mgmt", "/dashboard/user-mgmt", "/dashboard/logs"];
+    const adminRoutes = [
+      "/dashboard/faculty-mgmt", 
+      "/dashboard/user-mgmt", 
+      "/dashboard/logs",
+      "/dashboard/match-vocab",
+      "/dashboard/match-analysis",
+      "/dashboard/match-insights",
+      "/dashboard/match-compare"
+    ];
 
     // 0. Super-Admin Bypass
     // If the user is an admin or has the isAdmin flag, grant them unrestricted access
@@ -21,8 +29,9 @@ export default withAuth(
       return;
     }
 
-    // 1. Admin Protections
-    if (adminRoutes.some(r => path.startsWith(r)) && role !== "admin" && !isAdmin) {
+    // 1. Admin Protections (Dept Head also has access to telemetry and vocab)
+    const isAdminLevel = role === "admin" || isAdmin || role === "dept_head";
+    if (adminRoutes.some(r => path.startsWith(r)) && !isAdminLevel) {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
 
@@ -31,13 +40,14 @@ export default withAuth(
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
 
-    // 3. Advisor Protections (Assumes Dept Head can also view advisor routes)
-    if (advisorRoutes.some(r => path.startsWith(r)) && !["advisor", "dept_head"].includes(role)) {
+    // 3. Advisor Protections (Users with advising_series, advisor role, or dept_head)
+    const isAdvisor = !!token?.advising_series || ["advisor", "dept_head"].includes(role);
+    if (advisorRoutes.some(r => path.startsWith(r)) && !isAdvisor) {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
 
     // 4. Faculty Protections (Faculty, Advisor, and Dept Head share these)
-    const isFacultyLevel = ["faculty", "advisor", "dept_head"].includes(role);
+    const isFacultyLevel = ["faculty", "advisor", "dept_head"].includes(role) || isAdvisor;
     if (facultyRoutes.some(r => path.startsWith(r)) && !isFacultyLevel) {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
