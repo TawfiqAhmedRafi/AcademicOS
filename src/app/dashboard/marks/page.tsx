@@ -14,11 +14,18 @@ import {
   Lock,
   BookOpen,
   ShieldAlert,
+  Layers,
+  LayoutGrid,
   Users as UsersIcon
 } from "lucide-react";
 import { useToast } from "../../components/ToastProvider";
 import DropdownFilter from "../../components/DropdownFilter";
 import Swal from "sweetalert2";
+import { getSegments, getUnifiedColumns } from "@/lib/markSegments";
+
+type UploadMode = "separate" | "unified";
+const UPLOAD_MODE_STORAGE_KEY = "aos_marks_upload_mode";
+const UNIFIED_SEGMENT = "__unified__";
 
 type MarkCourse = {
   uniqueId: string;
@@ -36,55 +43,7 @@ type MarkCourse = {
 };
 
 // Dynamic Segments based on Course Code Patterns & Teacher Count
-const getSegments = (course: MarkCourse) => {
-  if (course.isBacklog) {
-    return ["Semester Final (Backlog)"];
-  }
-
-  const code = (course.courseCode || "").toUpperCase();
-
-  // --- SPECIAL RUET PROJECT / THESIS / SEMINAR PATTERNS ---
-  if (code.includes("2200") || code.includes("3200")) {
-    return ["Supervisor", "Showcase", "Board Viva"];
-  }
-  if (code.includes("3218")) {
-    return ["Supervisor", "Seminar 1", "Seminar 2"];
-  }
-  if (code.includes("4100")) {
-    return ["Supervisor", "Pre Defense", "Board Viva"];
-  }
-  if (code.includes("4200")) {
-    return ["Supervisor", "Defense", "Board Viva"];
-  }
-
-  // --- REGULAR THEORY ---
-  if (course.type === "theory") {
-    if (course.teacherCount > 1)
-      return [
-        "Class Tests (2)",
-        "Assignment",
-        "Attendance",
-        "Semester Final (Part)",
-      ];
-    return [
-      "Class Tests (4)",
-      "Assignment",
-      "Attendance",
-      "Semester Final (Full)",
-    ];
-  }
-
-  // --- STANDARD SESSIONAL/LAB ---
-  return [
-    "Attendance",
-    "Quiz",
-    "Lab Report",
-    "Performance",
-    "Lab Viva",
-    "Lab Final",
-    "Board Viva",
-  ];
-};
+// (shared with the template + upload APIs via @/lib/markSegments)
 
 export default function FacultyMarksDashboard() {
   const [courses, setCourses] = useState<MarkCourse[]>([]);
@@ -98,7 +57,37 @@ export default function FacultyMarksDashboard() {
     series: number;
     segment: string;
     isBacklog: boolean;
+    mode: UploadMode;
+    type: string;
+    teacherCount: number;
   } | null>(null);
+
+  // Per-course Separate/Unified preference, remembered in the browser
+  const [uploadModes, setUploadModes] = useState<Record<string, UploadMode>>({});
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(UPLOAD_MODE_STORAGE_KEY);
+      if (saved) setUploadModes(JSON.parse(saved));
+    } catch {
+      /* ignore corrupt storage */
+    }
+  }, []);
+
+  const getMode = (course: MarkCourse): UploadMode =>
+    course.isBacklog ? "separate" : uploadModes[course.uniqueId] || "separate";
+
+  const setMode = (uniqueId: string, mode: UploadMode) => {
+    setUploadModes((prev) => {
+      const next = { ...prev, [uniqueId]: mode };
+      try {
+        localStorage.setItem(UPLOAD_MODE_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* storage unavailable */
+      }
+      return next;
+    });
+  };
 
   const { showToast } = useToast();
   const [seriesFilter, setSeriesFilter] = useState("All");
@@ -179,23 +168,25 @@ export default function FacultyMarksDashboard() {
 
   const handleDownloadDemo = async (course: MarkCourse, segment: string) => {
     showToast(`Generating template for ${course.courseCode}...`, "info");
+    const isUnified = segment === UNIFIED_SEGMENT;
     try {
       // Pass the isBacklog flag to ensure the backend filters the Excel rows!
-      const res = await fetch(
-        `/api/faculty/template?courseCode=${encodeURIComponent(course.courseCode)}&series=${course.series}&segment=${encodeURIComponent(segment)}&isBacklog=${course.isBacklog ? "true" : "false"}`,
-      );
+      const url = isUnified
+        ? `/api/faculty/template?courseCode=${encodeURIComponent(course.courseCode)}&series=${course.series}&mode=unified&type=${encodeURIComponent(course.type)}&teacherCount=${course.teacherCount}&isBacklog=false`
+        : `/api/faculty/template?courseCode=${encodeURIComponent(course.courseCode)}&series=${course.series}&segment=${encodeURIComponent(segment)}&isBacklog=${course.isBacklog ? "true" : "false"}`;
+      const res = await fetch(url);
       if (!res.ok)
         throw new Error((await res.text()) || "Failed to generate template");
 
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
-      a.download = `${course.courseCode.replace(/\s+/g, "_")}_${course.series}_${segment.replace(/[^a-zA-Z0-9]/g, "_")}.xlsx`;
+      a.href = blobUrl;
+      a.download = `${course.courseCode.replace(/\s+/g, "_")}_${course.series}_${isUnified ? "UNIFIED" : segment.replace(/[^a-zA-Z0-9]/g, "_")}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(blobUrl);
     } catch (error: any) {
       showToast(error.message || "Failed to download template.", "error");
     }
@@ -207,6 +198,9 @@ export default function FacultyMarksDashboard() {
       series: course.series,
       segment,
       isBacklog: !!course.isBacklog,
+      mode: segment === UNIFIED_SEGMENT ? "unified" : "separate",
+      type: course.type,
+      teacherCount: course.teacherCount,
     });
     if (fileInputRef.current) fileInputRef.current.click();
   };
@@ -218,18 +212,27 @@ export default function FacultyMarksDashboard() {
     setIsUploading(true);
     showToast(`Uploading and processing marks...`, "info");
 
+    const isUnified = uploadTarget.mode === "unified";
     const formData = new FormData();
     formData.append("file", file);
     formData.append("courseCode", uploadTarget.courseCode);
     formData.append("series", String(uploadTarget.series));
-    formData.append("segment", uploadTarget.segment);
-    formData.append("isBacklog", String(uploadTarget.isBacklog));
+    if (isUnified) {
+      formData.append("type", uploadTarget.type);
+      formData.append("teacherCount", String(uploadTarget.teacherCount));
+    } else {
+      formData.append("segment", uploadTarget.segment);
+      formData.append("isBacklog", String(uploadTarget.isBacklog));
+    }
 
     try {
-      const res = await fetch("/api/faculty/upload-marks", {
-        method: "POST",
-        body: formData,
-      });
+      const res = await fetch(
+        isUnified ? "/api/faculty/upload-marks-unified" : "/api/faculty/upload-marks",
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
 
@@ -320,6 +323,12 @@ export default function FacultyMarksDashboard() {
             })
             .map((course) => {
               const segments = getSegments(course);
+              const mode = getMode(course);
+              const unifiedColumns =
+                mode === "unified" ? getUnifiedColumns(course) : [];
+              const isUnifiedComplete =
+                mode === "unified" &&
+                segments.every((s) => course.completedSegments.includes(s));
 
               return (
                 <div
@@ -372,12 +381,38 @@ export default function FacultyMarksDashboard() {
                       </p>
                     </div>
                     {!course.isBacklog && (
-                      <button
-                        onClick={() => handleHideCourse(course.uniqueId)}
-                        className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
-                      >
-                        <EyeOff size={14} /> Remove
-                      </button>
+                      <div className="flex items-center gap-4">
+                        {/* Separate / Unified upload mode toggle */}
+                        <div
+                          role="radiogroup"
+                          aria-label="Upload mode"
+                          className="flex items-center rounded-xl bg-slate-200/70 dark:bg-white/10 p-1"
+                        >
+                          {(
+                            [
+                              { id: "separate", label: "Separate", icon: LayoutGrid },
+                              { id: "unified", label: "Unified", icon: Layers },
+                            ] as const
+                          ).map((opt) => (
+                            <button
+                              key={opt.id}
+                              id={`upload-mode-${opt.id}-${course.uniqueId}`}
+                              role="radio"
+                              aria-checked={mode === opt.id}
+                              onClick={() => setMode(course.uniqueId, opt.id)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${mode === opt.id ? "bg-white text-slate-900 shadow-sm dark:bg-ruet-gold dark:text-black" : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"}`}
+                            >
+                              <opt.icon size={13} /> {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => handleHideCourse(course.uniqueId)}
+                          className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
+                        >
+                          <EyeOff size={14} /> Remove
+                        </button>
+                      </div>
                     )}
                   </div>
 
@@ -407,6 +442,80 @@ export default function FacultyMarksDashboard() {
                     </div>
                   )}
 
+                  {mode === "unified" ? (
+                    <div
+                      className={`p-6 ${course.isXXPending ? "opacity-50 pointer-events-none grayscale" : ""}`}
+                    >
+                      <div
+                        className={`rounded-2xl p-5 border transition-colors flex flex-col lg:flex-row lg:items-center gap-5 ${isUnifiedComplete ? "border-emerald-500/50 bg-emerald-50/30 dark:bg-emerald-500/5" : "bg-slate-50 dark:bg-black/20 border-slate-200 dark:border-white/5"}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm">
+                              Unified Marks Sheet
+                            </h4>
+                            {isUnifiedComplete && (
+                              <CheckCircle2 size={18} className="text-emerald-500 flex-shrink-0" />
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500 mb-3">
+                            One sheet for every assessment. Attendance is a direct mark.
+                            {course.type === "theory" &&
+                              (course.teacherCount > 1
+                                ? " Best 3 of all 4 CTs (yours + co-teacher's) are averaged; the other half of the final comes from your co-teacher."
+                                : " Best 3 of 4 CTs are averaged.")}
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-900 text-white dark:bg-white dark:text-black">
+                              Roll Number
+                            </span>
+                            {unifiedColumns.map((col) => (
+                              <span
+                                key={col.header}
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${course.completedSegments.includes(col.segment) ? "border-emerald-400/60 text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-500/10" : "border-slate-300 text-slate-600 bg-white dark:border-white/10 dark:text-slate-300 dark:bg-white/5"}`}
+                              >
+                                {col.header}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row lg:flex-col gap-2 lg:w-56 flex-shrink-0">
+                          <button
+                            id={`unified-template-${course.uniqueId}`}
+                            onClick={() => handleDownloadDemo(course, UNIFIED_SEGMENT)}
+                            className="w-full flex items-center justify-center gap-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 py-2 rounded-xl text-xs font-bold transition-colors"
+                          >
+                            <FileSpreadsheet size={14} className="text-emerald-600 dark:text-emerald-400" />{" "}
+                            Unified Template
+                          </button>
+                          <button
+                            id={`unified-upload-${course.uniqueId}`}
+                            onClick={() => triggerUploadClick(course, UNIFIED_SEGMENT)}
+                            disabled={isUploading || course.isLocked}
+                            className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-colors shadow-sm disabled:opacity-50 ${course.isLocked ? "bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed" : isUnifiedComplete ? "bg-slate-800 text-white hover:bg-slate-700 dark:bg-white dark:text-black dark:hover:bg-slate-200" : "bg-ruet-blue text-white hover:bg-blue-900 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400"}`}
+                          >
+                            {isUploading &&
+                            uploadTarget?.segment === UNIFIED_SEGMENT &&
+                            uploadTarget?.courseCode === course.courseCode ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : course.isLocked ? (
+                              <Lock size={14} />
+                            ) : isUnifiedComplete ? (
+                              <Check size={14} />
+                            ) : (
+                              <Upload size={14} />
+                            )}
+                            {course.isLocked
+                              ? "Locked"
+                              : isUnifiedComplete
+                                ? "Update All Marks"
+                                : "Upload All Marks"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
                   <div
                     className={`p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${course.isXXPending ? "opacity-50 pointer-events-none grayscale" : ""}`}
                   >
@@ -486,6 +595,7 @@ export default function FacultyMarksDashboard() {
                       );
                     })}
                   </div>
+                  )}
                 </div>
               );
             })}

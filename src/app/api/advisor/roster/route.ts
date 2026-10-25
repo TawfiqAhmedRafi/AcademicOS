@@ -8,7 +8,7 @@ import { ObjectId } from "mongodb"; // <-- NEW: Properly imported ObjectId
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   
-  if (!session?.user?.advising_series) {
+  if (!session?.user?.advising_series && session?.user?.role !== "dept_head") {
     return NextResponse.json({ error: "Unauthorized. Not an active advisor." }, { status: 403 });
   }
 
@@ -16,14 +16,24 @@ export async function GET(req: Request) {
     const client = await clientPromise;
     const db = client.db("academicos");
 
-    const seriesArray = session.user.advising_series.split(",").map(s => s.trim());
+    const seriesArray = session.user.advising_series
+      ? session.user.advising_series.split(",").map((s: string) => s.trim())
+      : [];
+
+    const seriesQuery = session.user.role === "dept_head" && seriesArray.length === 0
+      ? {}
+      : { series: { $in: seriesArray } };
+
+    const studentsQuery = session.user.role === "dept_head" && seriesArray.length === 0
+      ? { role: "student" }
+      : { role: "student", series: { $in: seriesArray } };
 
     const seriesData = await db.collection("series")
-      .find({ series: { $in: seriesArray } })
+      .find(seriesQuery)
       .toArray();
 
     const students = await db.collection("users")
-      .find({ role: "student", series: { $in: seriesArray } })
+      .find(studentsQuery)
       .project({ password_hash: 0, resetOtp: 0 }) 
       .toArray();
 
@@ -42,13 +52,15 @@ export async function GET(req: Request) {
 
 export async function PATCH(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.advising_series) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  if (!session?.user?.advising_series && session?.user?.role !== "dept_head") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
 
   try {
     const { series, action, payload } = await req.json();
     
-    const seriesArray = session.user.advising_series.split(",").map(s => s.trim());
-    if (!seriesArray.includes(series)) {
+    const seriesArray = session.user.advising_series ? session.user.advising_series.split(",").map((s: string) => s.trim()) : [];
+    if (!seriesArray.includes(String(series)) && session.user.role !== "dept_head") {
       return NextResponse.json({ error: "Forbidden. You do not advise this series." }, { status: 403 });
     }
 

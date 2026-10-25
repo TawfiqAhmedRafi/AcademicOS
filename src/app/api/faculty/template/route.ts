@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
 import * as XLSX from "xlsx";
+import { getUnifiedColumns } from "@/lib/markSegments";
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -22,7 +23,12 @@ export async function GET(req: NextRequest) {
     // --- NEW: Intercept Backlog Flag ---
     const isBacklog = searchParams.get("isBacklog") === "true";
 
-    if (!courseCode || !series || !segment) {
+    // --- NEW: Unified (single sheet) mode ---
+    const isUnified = searchParams.get("mode") === "unified";
+    const courseType = searchParams.get("type") || "theory";
+    const teacherCount = Number(searchParams.get("teacherCount")) || 1;
+
+    if (!courseCode || !series || (!segment && !isUnified)) {
       return new NextResponse("Missing parameters", { status: 400 });
     }
 
@@ -61,7 +67,10 @@ export async function GET(req: NextRequest) {
 
     // Bulletproof header mapping for CTs
     let headers: string[] = [];
-    if (segment === "Attendance") {
+    if (isUnified) {
+      const columns = getUnifiedColumns({ courseCode, type: courseType, teacherCount, isBacklog: false });
+      headers = ["Roll Number", ...columns.map(c => c.header)];
+    } else if (segment === "Attendance") {
       headers = ["Roll Number", "Total Classes", "Attended Classes"];
     } else if (segment === "Class Tests (4)") {
       headers = ["Roll Number", "CT-1", "CT-2", "CT-3", "CT-4"]; 
@@ -93,7 +102,7 @@ export async function GET(req: NextRequest) {
 
     const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
-    const sanitizedSegment = segment.replace(/[^a-zA-Z0-9]/g, "_");
+    const sanitizedSegment = isUnified ? "UNIFIED" : segment.replace(/[^a-zA-Z0-9]/g, "_");
     const filename = `${courseCode.replace(/\s+/g, "_")}_${series}_${isBacklog ? 'BACKLOG_' : ''}${sanitizedSegment}.xlsx`;
 
     return new NextResponse(buffer, {

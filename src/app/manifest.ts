@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Academic OS",
     short_name: "AcademicOS",
     description: "Academic Operating System",
-    start_url: "/dashboard",
+    start_url: "/",
     scope: "/",
     display: "standalone",
     orientation: "any",

@@ -23,12 +23,44 @@ const {
   shell,
 } = require("electron");
 const fs = require("fs");
+const http = require("http");
 const path = require("path");
 
 const APP_ID = "bd.ac.ruet.ete.academicos"; // must match build.appId in package.json
-const APP_URL = (process.env.AOS_URL || "https://academic-os-iota.vercel.app").replace(/\/+$/, "");
-const APP_ORIGIN = new URL(APP_URL).origin;
-const START_URL = `${APP_URL}/`;
+const CLOUD_URL = "https://academic-os-iota.vercel.app";
+const LOCAL_URL = "http://localhost:3000";
+
+let currentAppUrl = process.env.AOS_URL ? process.env.AOS_URL.replace(/\/+$/, "") : null;
+
+function getStartUrl() {
+  return `${currentAppUrl || CLOUD_URL}/`;
+}
+
+function probeServer(url, timeoutMs = 800) {
+  return new Promise((resolve) => {
+    try {
+      const u = new URL(url);
+      const req = http.get(
+        {
+          hostname: u.hostname,
+          port: u.port || 80,
+          path: "/",
+          timeout: timeoutMs,
+        },
+        (res) => {
+          resolve(res.statusCode < 500);
+        }
+      );
+      req.on("error", () => resolve(false));
+      req.on("timeout", () => {
+        req.destroy();
+        resolve(false);
+      });
+    } catch {
+      resolve(false);
+    }
+  });
+}
 
 // Payment gateway: registration / form-fillup do `window.location.href = GatewayPageURL`,
 // so SSLCommerz must open inside the app (the callback returns to our own origin).
@@ -58,7 +90,14 @@ function parseUrl(url) {
 }
 
 function isAppOrigin(u) {
-  return !!u && u.origin === APP_ORIGIN;
+  if (!u) return false;
+  const origin = u.origin;
+  return (
+    origin === "https://academic-os-iota.vercel.app" ||
+    origin === "http://localhost:3000" ||
+    origin === "http://127.0.0.1:3000" ||
+    (currentAppUrl && origin === new URL(currentAppUrl).origin)
+  );
 }
 
 function isPaymentHost(u) {
@@ -93,7 +132,14 @@ function goForward(win = targetWindow()) {
 
 function goHome() {
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.loadURL(START_URL).catch(() => {});
+    mainWindow.loadURL(getStartUrl()).catch(() => {});
+  }
+}
+
+function switchEnvironment(newUrl) {
+  currentAppUrl = newUrl.replace(/\/+$/, "");
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.loadURL(getStartUrl()).catch(() => {});
   }
 }
 
@@ -153,7 +199,7 @@ function saveWindowState(win) {
 function showOfflinePage(win, failedUrl, reason) {
   const failed = parseUrl(failedUrl);
   // Retry the same page if it belongs to the app or payment gateway; otherwise go home.
-  const retry = isAppOrigin(failed) || isPaymentHost(failed) ? failed.toString() : START_URL;
+  const retry = isAppOrigin(failed) || isPaymentHost(failed) ? failed.toString() : getStartUrl();
   win.loadFile(OFFLINE_PAGE, { query: { retry, reason: String(reason || "") } }).catch(() => {});
 }
 
@@ -253,7 +299,17 @@ function buildMenu() {
       label: "File",
       submenu: [
         { label: "Home", accelerator: "Alt+Home", click: goHome },
-        { label: "Open in Browser", click: () => openExternal(targetWindow()?.webContents.getURL() || APP_URL) },
+        { type: "separator" },
+        {
+          label: "Connect to Local Server (localhost:3000)",
+          click: () => switchEnvironment(LOCAL_URL),
+        },
+        {
+          label: "Connect to Cloud Server (academic-os-iota.vercel.app)",
+          click: () => switchEnvironment(CLOUD_URL),
+        },
+        { type: "separator" },
+        { label: "Open in Browser", click: () => openExternal(targetWindow()?.webContents.getURL() || currentAppUrl || CLOUD_URL) },
         { type: "separator" },
         { role: "quit" },
       ],
@@ -278,6 +334,17 @@ function buildMenu() {
         { type: "separator" },
         { role: "reload" },
         { role: "forceReload" },
+        {
+          label: "Clear Cache & Hard Reload",
+          accelerator: "CmdOrCtrl+Shift+Delete",
+          click: async () => {
+            const win = targetWindow();
+            if (win && !win.isDestroyed()) {
+              await session.defaultSession.clearCache();
+              win.webContents.reloadIgnoringCache();
+            }
+          },
+        },
         { type: "separator" },
         { role: "resetZoom" },
         { role: "zoomIn" },
@@ -297,7 +364,7 @@ function buildMenu() {
               type: "info",
               title: "About Academic OS",
               message: "Academic OS",
-              detail: `Version ${app.getVersion()}\n${APP_URL}`,
+              detail: `Version: ${app.getVersion()}\nActive URL: ${currentAppUrl || CLOUD_URL}`,
               icon: ICON_PATH,
             }),
         },
@@ -381,7 +448,7 @@ function createMainWindow() {
     mainWindow = null;
   });
 
-  mainWindow.loadURL(START_URL).catch(() => {
+  mainWindow.loadURL(getStartUrl()).catch(() => {
     /* did-fail-load shows the offline page */
   });
 }
@@ -418,7 +485,12 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on("web-contents-created", (_e, contents) => attachPolicies(contents));
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
+    if (!currentAppUrl) {
+      const localUp = await probeServer("http://127.0.0.1:3000");
+      currentAppUrl = localUp ? LOCAL_URL : CLOUD_URL;
+    }
+
     session.defaultSession.setPermissionRequestHandler((wc, permission, callback, details) => {
       const origin = parseUrl(details.requestingUrl || wc.getURL());
       callback(isAppOrigin(origin) && ALLOWED_PERMISSIONS.has(permission));
