@@ -124,7 +124,7 @@ const studentLinks = [
 
         {user.role === "student" && renderLinks(studentLinks)}
         
-        {(user.role === "faculty" || user.role === "dept_head") && (
+        {(["faculty", "advisor", "dept_head"].includes(user.role)) && (
           <>
             {renderLinks(facultyBaseLinks, "Faculty Menu")}
             {user.advising_series && renderLinks(advisorLinks, `Advisor Tools (Series ${user.advising_series})`)}

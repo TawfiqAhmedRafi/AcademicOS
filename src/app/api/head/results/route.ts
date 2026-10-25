@@ -7,7 +7,8 @@ import { logSystemAction } from "@/lib/logger";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (session?.user?.role !== "dept_head") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  const isHeadOrAdmin = session?.user?.role === "dept_head" || session?.user?.role === "admin" || !!session?.user?.isAdmin;
+  if (!isHeadOrAdmin) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
   try {
     const client = await clientPromise;
@@ -21,7 +22,8 @@ export async function GET() {
 
 export async function PATCH(req: Request) {
   const session = await getServerSession(authOptions);
-  if (session?.user?.role !== "dept_head") return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  const isHeadOrAdmin = session?.user?.role === "dept_head" || session?.user?.role === "admin" || !!session?.user?.isAdmin;
+  if (!isHeadOrAdmin) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
   try {
     const { draftId, action } = await req.json();

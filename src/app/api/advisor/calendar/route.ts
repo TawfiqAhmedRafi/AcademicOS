@@ -15,10 +15,29 @@ const cleanCourseCode = (code: string) => {
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.advising_series) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  if (!session?.user?.advising_series && session?.user?.role !== "dept_head") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
 
   try {
-    const series = session.user.advising_series.split(",")[0].trim();
+    const isDeptHead = session.user.role === "dept_head";
+    const advisingSeriesList = session.user.advising_series?.split(",").map((s: string) => s.trim()) || [];
+    const { searchParams } = new URL(req.url);
+    const requestedSeries = searchParams.get("series");
+
+    let series = advisingSeriesList[0] || "";
+    if (requestedSeries && (isDeptHead || advisingSeriesList.includes(requestedSeries))) {
+      series = requestedSeries;
+    }
+
+    if (!series && isDeptHead) {
+      // If dept head doesn't advise a series, default to the latest active series
+      const client = await clientPromise;
+      const db = client.db("academicos");
+      const activeSeries = await db.collection("series").findOne({ status: "active" }, { sort: { series: -1 } });
+      series = activeSeries?.series || "";
+    }
+
     const client = await clientPromise;
     const db = client.db("academicos");
 
@@ -70,10 +89,19 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.advising_series) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  if (!session?.user?.advising_series && session?.user?.role !== "dept_head") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
 
   try {
     const { series, semester, scheduleEvents, ctSchedule, finalSchedule, isPublish } = await req.json();
+
+    const isDeptHead = session.user.role === "dept_head";
+    const advisingSeriesList = session.user.advising_series?.split(",").map((s: string) => s.trim()) || [];
+    if (!isDeptHead && !advisingSeriesList.includes(String(series))) {
+      return NextResponse.json({ error: "Forbidden. You do not advise this series." }, { status: 403 });
+    }
+
     const client = await clientPromise;
     const db = client.db("academicos");
 
