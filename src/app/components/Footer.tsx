@@ -23,7 +23,7 @@ export default function Footer() {
             </div>
 
             <a 
-              href="https://drive.google.com/file/d/1BgCzIb9MSU14T16IA7rDIpq4KtqJvXJA/view?usp=sharing" 
+              href="https://drive.google.com/file/d/1CWfvLVB37Ekgdi8sNffsWyVc4bnW2Oml/view?usp=drive_link" 
               target="_blank" 
               rel="noopener noreferrer"
               className="mt-2 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-ruet-blue dark:bg-white dark:text-black dark:hover:bg-ruet-gold"
