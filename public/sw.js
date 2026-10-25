@@ -2,7 +2,7 @@
  * Deliberately minimal: the app is login-protected and data-driven, so we NEVER
  * cache pages or API responses (avoids showing stale or another user's data).
  * We only cache immutable static assets and provide an offline fallback page. */
-const VERSION = "v1";
+const VERSION = "v2";
 const STATIC_CACHE = `aos-static-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [OFFLINE_URL, "/icons/icon-192.png", "/icons/icon-512.png"];
