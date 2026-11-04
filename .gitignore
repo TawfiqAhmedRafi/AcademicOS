@@ -31,6 +31,8 @@ ETE Department.xlsx
 ETE25.xlsx
 ETE Syllabus.pdf
 ete-database-schema.pdf
+migrate-is-verified.mjs
+test-email-verification.mjs
 # debug
 npm-debug.log*
 yarn-debug.log*

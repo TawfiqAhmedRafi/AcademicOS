@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import bcrypt from "bcryptjs";
+import { isUserVerified } from "@/lib/verification";
 
 export async function POST(req: Request) {
   try {
@@ -21,6 +22,10 @@ export async function POST(req: Request) {
     const isTempValid = await bcrypt.compare(tempPassword, user.password_hash);
     if (!isTempValid) {
       return NextResponse.json({ message: "Authentication failed" }, { status: 401 });
+    }
+
+    if (!isUserVerified(user)) {
+      return NextResponse.json({ message: "Please verify your email before completing setup." }, { status: 403 });
     }
 
     if (tempPassword === newPassword) {

@@ -31,3 +31,24 @@ export const sendOTP = async (to: string, otp: string) => {
   };
   await transporter.sendMail(mailOptions);
 };
+
+
+export const sendVerificationCode = async (to: string, code: string) => {
+  const mailOptions = {
+    from: `"Academic OS Security" <${process.env.SMTP_EMAIL}>`,
+    to,
+    subject: "Academic OS - Verify Your Email",
+    html: `
+      <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #f8fafc;">
+        <h2 style="color: #002B49; text-align: center;">Academic OS</h2>
+        <p style="color: #334155;">Hello,</p>
+        <p style="color: #334155;">Welcome to Academic OS! To verify your email address and activate your account, enter the 6-digit code below. This code is valid for <strong>10 minutes</strong>.</p>
+        <div style="background-color: #ffffff; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0; border: 1px solid #cbd5e1;">
+          <h1 style="letter-spacing: 6px; color: #F59E0B; margin: 0; font-size: 36px;">${code}</h1>
+        </div>
+        <p style="color: #64748b; font-size: 12px; text-align: center;">If you did not try to sign in to Academic OS, please contact the department administrator.</p>
+      </div>
+    `,
+  };
+  await transporter.sendMail(mailOptions);
+};

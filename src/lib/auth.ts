@@ -2,6 +2,7 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import clientPromise from "@/lib/mongodb";
 import bcrypt from "bcryptjs";
+import { isUserVerified } from "@/lib/verification";
 
 export const authOptions: NextAuthOptions = {
     secret: process.env.NEXTAUTH_SECRET,
@@ -41,6 +42,15 @@ export const authOptions: NextAuthOptions = {
                     } else {
                         throw new Error("Invalid email or password");
                     }
+                }
+                // Email verification gate (first-time login) — must happen before setup
+                if (!isUserVerified(user)) {
+                    throw new Error(JSON.stringify({
+                        code: "NEEDS_VERIFICATION",
+                        role: user.role,
+                        initials: user.initials || "",
+                        needsSetup: !!user.needs_setup,
+                    }));
                 }
                 if (user.needs_setup) {
                     throw new Error(JSON.stringify({ 

@@ -73,6 +73,7 @@ export async function POST(req: Request) {
         role: "student",
         department: "ETE",
         needs_setup: true, 
+        isVerified: false,
         loginAttempts: 0,
         createdAt: new Date(),
         updatedAt: new Date()
