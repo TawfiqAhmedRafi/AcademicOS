@@ -11,7 +11,7 @@ import {
   CalendarPlus, DatabaseZap, Network, CalendarRange, FileCheck, 
   IdCard, BookType, LineChart, Activity, UserCog, ShieldCheck, 
   ScrollText, LogOut, Sun, Moon,
-  Database
+  Database, Bell
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -24,12 +24,36 @@ export default function Sidebar({ user, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { theme, setTheme, systemTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setMounted(true);
+
+    const fetchCount = async () => {
+      try {
+        const res = await fetch("/api/notifications?countOnly=1");
+        if (res.ok) {
+          const data = await res.json();
+          setUnreadCount(data.unreadCount || 0);
+        }
+      } catch {}
+    };
+
+    fetchCount();
+    const interval = setInterval(fetchCount, 60000);
+    const onFocus = () => fetchCount();
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
   const currentTheme = theme === "system" ? systemTheme : theme;
 
 const studentLinks = [
     { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Notifications", href: "/dashboard/notifications", icon: Bell },
     { name: "Course Registration", href: "/dashboard/registration", icon: BookPlus },
     { name: "Backlog Registration", href: "/dashboard/backlog-registration", icon: History },
     { name: "Form Fill-up", href: "/dashboard/form-fillup", icon: ClipboardEdit },
@@ -41,6 +65,7 @@ const studentLinks = [
 
   const facultyBaseLinks = [
     { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Notifications", href: "/dashboard/notifications", icon: Bell },
     { name: "My Classes", href: "/dashboard/classes", icon: Presentation },
     { name: "Upload Marks", href: "/dashboard/marks", icon: FileUp },
     { name: "Projects & Thesis", href: "/dashboard/projects", icon: Database },
@@ -63,6 +88,7 @@ const studentLinks = [
 
   const adminLinks = [
     { name: "System Overview", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Notifications", href: "/dashboard/notifications", icon: Bell },
     { name: "Match Vocabulary", href: "/dashboard/match-vocab", icon: BookType },
     { name: "Match Analysis", href: "/dashboard/match-analysis", icon: LineChart },
     { name: "Match Telemetry", href: "/dashboard/match-insights", icon: Activity },
@@ -86,14 +112,27 @@ const studentLinks = [
               key={link.name} 
               href={link.href}
               onClick={onClose}
-              className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all ${
+              className={`flex items-center justify-between rounded-xl px-4 py-3 text-sm font-medium transition-all ${
                 isActive 
                   ? "bg-ruet-blue text-white shadow-md dark:bg-ruet-gold dark:text-black" 
                   : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"
               }`}
             >
-              <link.icon size={18} className={isActive ? "text-white dark:text-black" : "text-slate-400"} />
-              {link.name}
+              <div className="flex items-center gap-3">
+                <link.icon size={18} className={isActive ? "text-white dark:text-black" : "text-slate-400"} />
+                <span>{link.name}</span>
+              </div>
+              {link.name === "Notifications" && unreadCount > 0 && (
+                <span
+                  className={`flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold shadow-sm ${
+                    isActive
+                      ? "bg-white text-ruet-blue dark:bg-black dark:text-ruet-gold"
+                      : "bg-red-500 text-white"
+                  }`}
+                >
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
             </Link>
           );
         })}

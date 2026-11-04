@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
+import { createNotification } from "@/lib/notifications";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -63,6 +64,31 @@ export async function PATCH(req: Request) {
       { series, courseCode },
       { $set: { teachers: newTeachers, updatedAt: new Date() } }
     );
+
+    // Resolve teacher userIds matching initials
+    const teacherInitials = Array.isArray(newTeachers) ? newTeachers : [];
+    let teacherUserIds: string[] = [];
+    if (teacherInitials.length > 0) {
+      const teacherDocs = await db.collection("users")
+        .find({ initials: { $in: teacherInitials } })
+        .project({ _id: 1 })
+        .toArray();
+      teacherUserIds = teacherDocs.map(t => String(t._id));
+    }
+
+    await createNotification({
+      title: `Course Allocation: ${courseCode}`,
+      message: `Instructors assigned for ${courseCode} (Series ${series}): ${teacherInitials.join(", ")}`,
+      category: "routine",
+      link: "/dashboard/classes",
+      audience: {
+        roles: ["student"],
+        series: [String(series)],
+        userIds: teacherUserIds,
+      },
+      actorId: session.user.id,
+      dedupeKey: `alloc_${series}_${courseCode}`,
+    });
 
     return NextResponse.json({ message: "Course allocation updated successfully." });
   } catch (error) {

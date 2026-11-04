@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { logSystemAction } from "@/lib/logger";
+import { createNotification } from "@/lib/notifications";
 
 export async function GET(req: Request) {
   try {
@@ -95,6 +96,30 @@ export async function POST(req: Request) {
 
     await db.collection("notices").insertOne(newNotice);
     await logSystemAction("Notice Posted", "System", `Head posted notice for Series: ${series}`);
+
+    // Trigger Notification
+    let targetRoles = ["student", "faculty", "dept_head", "advisor", "admin"];
+    let targetSeries: string[] | null = null;
+
+    if (series === "faculty") {
+      targetRoles = ["faculty", "dept_head", "advisor"];
+      targetSeries = null;
+    } else if (series !== "all") {
+      targetRoles = ["student"];
+      targetSeries = [String(series)];
+    }
+
+    await createNotification({
+      title: `Notice: ${title}`,
+      message: content.length > 120 ? `${content.slice(0, 117)}...` : content,
+      category: "notice",
+      link: "/notice",
+      audience: {
+        roles: targetRoles,
+        series: targetSeries,
+      },
+      actorId: session.user.id,
+    });
 
     return NextResponse.json({ message: "Notice posted successfully" }, { status: 201 });
   } catch (error) {

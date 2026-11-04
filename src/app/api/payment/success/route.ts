@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
+import { createNotification, getSeriesAdvisorUserIds } from "@/lib/notifications";
 
 export async function POST(req: Request) {
   try {
@@ -62,6 +63,38 @@ export async function POST(req: Request) {
           },
         }
       );
+
+      // Trigger notifications for both advisor and student
+      const studentDoc = await db.collection("users").findOne({ email: transaction.studentEmail });
+      const advisorUserIds = await getSeriesAdvisorUserIds(db, transaction.series);
+
+      // Notify Series Advisor(s)
+      await createNotification({
+        title: "Registration Submitted",
+        message: `${studentDoc?.name || transaction.roll} (${transaction.roll}) submitted course registration.`,
+        category: "approval",
+        link: "/dashboard/approvals",
+        audience: {
+          roles: ["advisor", "dept_head"],
+          series: [String(transaction.series)],
+          userIds: advisorUserIds,
+        },
+        actorId: studentDoc?._id ? String(studentDoc._id) : undefined,
+        dedupeKey: `reg_sub_${transaction.roll || transaction.studentEmail}`,
+      });
+
+      // Notify Student
+      if (studentDoc?._id) {
+        await createNotification({
+          title: "Registration Submitted",
+          message: "Your course registration has been submitted and is pending advisor approval.",
+          category: "registration",
+          link: "/dashboard/registration",
+          audience: {
+            userIds: [String(studentDoc._id)],
+          },
+        });
+      }
 
       return NextResponse.redirect(
         `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/dashboard/registration?payment=success`,

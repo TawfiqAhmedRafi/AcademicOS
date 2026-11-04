@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
+import { createNotification, getSeriesAdvisorUserIds } from "@/lib/notifications";
 import { ObjectId } from "mongodb";
 
 export async function GET() {
@@ -58,6 +59,26 @@ export async function POST(req: Request) {
         } 
       }
     );
+
+    // Notify series advisor
+    const userDoc = await db.collection("users").findOne({ email: session.user.email });
+    if (userDoc?.series) {
+      const advisorUserIds = await getSeriesAdvisorUserIds(db, userDoc.series);
+      await createNotification({
+        title: `Form Fill-up Submitted`,
+        message: `${userDoc.name || userDoc.student_id || "A student"} (${userDoc.student_id || ""}) submitted semester form fill-up.`,
+        category: "approval",
+        link: "/dashboard/approvals",
+        audience: {
+          roles: ["advisor", "dept_head"],
+          series: [String(userDoc.series)],
+          userIds: advisorUserIds,
+        },
+        actorId: session.user.id,
+        dedupeKey: `ff_sub_${userDoc.student_id || userDoc.email}`,
+      });
+    }
+
     return NextResponse.json({ message: "Form Fill-up submitted successfully to Advisor." });
   } catch (error) {
     return NextResponse.json({ error: "Server error" }, { status: 500 });

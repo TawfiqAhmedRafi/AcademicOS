@@ -4,7 +4,7 @@ import { useState, Suspense, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { ArrowRight, UploadCloud, Lock, Mail, Loader2, Eye, EyeOff, CheckCircle2, User, Info } from "lucide-react";
+import { ArrowRight, UploadCloud, Lock, Mail, Loader2, Eye, EyeOff, CheckCircle2, User, Info, ShieldCheck } from "lucide-react";
 
 function LoginForm() {
   const router = useRouter();
@@ -29,7 +29,7 @@ function LoginForm() {
     callbackUrl = "/";
   }
 
-  const [step, setStep] = useState<"login" | "setup">("login");
+  const [step, setStep] = useState<"login" | "verify" | "setup">("login");
   
   // Base Form State
   const [email, setEmail] = useState("");
@@ -37,6 +37,11 @@ function LoginForm() {
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [photo, setPhoto] = useState<File | null>(null);
+
+  // Email Verification State
+  const [verificationCode, setVerificationCode] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [isSendingCode, setIsSendingCode] = useState(false);
 
   // New State for Faculty Initials
   const [initials, setInitials] = useState("");
@@ -54,11 +59,62 @@ function LoginForm() {
     }
   }, [urlError]);
 
-  const handleLoginSubmit = async (e: React.FormEvent) => {
+  // Countdown for the "Resend code" button
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
+
+  const sendVerificationCode = async () => {
+    setIsSendingCode(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+    try {
+      const res = await fetch("/api/auth/verify-email/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (data.retryAfter) setResendCooldown(data.retryAfter);
+      if (!res.ok) throw new Error(data.message || "Failed to send verification code.");
+      setSuccessMsg(`A 6-digit verification code has been sent to ${email}.`);
+    } catch (error: any) {
+      setErrorMsg(error.message || "Failed to send verification code.");
+    } finally {
+      setIsSendingCode(false);
+    }
+  };
+
+  const handleVerifySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!/^\d{6}$/.test(verificationCode)) {
+      setErrorMsg("Please enter the 6-digit code from your email.");
+      return;
+    }
     setIsLoading(true);
     setErrorMsg("");
+    setSuccessMsg("");
+    try {
+      const res = await fetch("/api/auth/verify-email/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, code: verificationCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Verification failed.");
 
+      setSuccessMsg("Email verified!");
+      // Re-run sign in: will either log in or route to the setup step
+      await attemptSignIn();
+    } catch (error: any) {
+      setErrorMsg(error.message || "Verification failed.");
+      setIsLoading(false);
+    }
+  };
+
+  const attemptSignIn = async () => {
     const res = await signIn("credentials", {
       redirect: false,
       email,
@@ -69,10 +125,21 @@ function LoginForm() {
       try {
         // Try parsing the error as JSON to see if it's our intercept block
         const errData = JSON.parse(res.error);
+
+        if (errData.code === "NEEDS_VERIFICATION") {
+          setUserRole(errData.role);
+          setInitials(errData.initials || "");
+          setVerificationCode("");
+          setStep("verify");
+          setIsLoading(false);
+          sendVerificationCode();
+          return;
+        }
         
         if (errData.code === "NEEDS_SETUP") {
           setUserRole(errData.role);
           setInitials(errData.initials || ""); // Pre-fill if they already exist
+          setSuccessMsg("");
           setStep("setup");
           setIsLoading(false);
           return;
@@ -89,6 +156,13 @@ function LoginForm() {
     } else {
       router.push(callbackUrl);
     }
+  };
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setErrorMsg("");
+    await attemptSignIn();
   };
 
   const handleSetupSubmit = async (e: React.FormEvent) => {
@@ -252,6 +326,55 @@ function LoginForm() {
                   <>Sign In <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" /></>
                 )}
               </button>
+            </form>
+          ) : step === "verify" ? (
+            <form onSubmit={handleVerifySubmit} className="flex flex-col gap-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Verify Your Email</h2>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                  This is your first login. Enter the 6-digit code we sent to <strong className="text-slate-900 dark:text-white">{email}</strong>.
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Verification Code</label>
+                <div className="relative">
+                  <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    required
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="000000"
+                    className="w-full rounded-xl border border-slate-300 bg-white/50 py-3 pl-10 pr-4 text-center text-lg font-semibold tracking-[0.5em] focus:border-ruet-blue focus:outline-none focus:ring-1 focus:ring-ruet-blue dark:border-white/10 dark:bg-black/20 dark:text-white dark:focus:border-ruet-gold dark:focus:ring-ruet-gold"
+                  />
+                </div>
+              </div>
+
+              <button disabled={isLoading || verificationCode.length !== 6} type="submit" className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-ruet-blue px-4 py-3 text-sm font-bold text-white transition-all hover:bg-blue-900 disabled:opacity-70 dark:bg-ruet-gold dark:text-black dark:hover:bg-amber-400">
+                {isLoading ? <><Loader2 size={16} className="animate-spin" /> Verifying...</> : "Verify Email"}
+              </button>
+
+              <div className="flex items-center justify-between text-xs">
+                <button
+                  type="button"
+                  onClick={() => { setStep("login"); setErrorMsg(""); setSuccessMsg(""); }}
+                  className="font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  ← Back to login
+                </button>
+                <button
+                  type="button"
+                  disabled={isSendingCode || resendCooldown > 0}
+                  onClick={sendVerificationCode}
+                  className="font-semibold text-ruet-blue hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline dark:text-ruet-gold"
+                >
+                  {isSendingCode ? "Sending..." : resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend code"}
+                </button>
+              </div>
             </form>
           ) : (
             <form onSubmit={handleSetupSubmit} className="flex flex-col gap-5 animate-in fade-in slide-in-from-bottom-4 duration-500">

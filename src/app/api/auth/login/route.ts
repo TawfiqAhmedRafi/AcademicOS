@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { isUserVerified } from "@/lib/verification";
 
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_super_secret_key";
 
@@ -24,6 +25,11 @@ export async function POST(request: Request) {
     const isPasswordValid = await bcrypt.compare(password, user.password_hash);
     if (!isPasswordValid) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
+    // INTERCEPT: If the user has not verified their email yet
+    if (!isUserVerified(user)) {
+      return NextResponse.json({ needsVerification: true, needsSetup: !!user.needs_setup }, { status: 200 });
     }
 
     // INTERCEPT: If the user needs to complete first-time setup

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
+import { createNotification } from "@/lib/notifications";
 
 export async function POST(req: Request) {
   try {
@@ -20,6 +21,20 @@ export async function POST(req: Request) {
           },
         }
       );
+
+      const tx = await db.collection("transactions").findOne({ tran_id });
+      if (tx?.studentEmail) {
+        const studentUser = await db.collection("users").findOne({ email: tx.studentEmail });
+        if (studentUser?._id) {
+          await createNotification({
+            title: "Payment Unsuccessful",
+            message: "Your payment transaction for course registration was not completed.",
+            category: "registration",
+            link: "/dashboard/registration",
+            audience: { userIds: [String(studentUser._id)] },
+          });
+        }
+      }
     }
 
     return NextResponse.redirect(

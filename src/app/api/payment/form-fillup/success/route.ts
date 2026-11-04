@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
+import { createNotification, getSeriesAdvisorUserIds } from "@/lib/notifications";
 
 export async function POST(req: Request) {
   try {
@@ -84,6 +85,39 @@ export async function POST(req: Request) {
           },
         }
       );
+
+      // Trigger notifications for advisor and student
+      const studentUser = await db.collection("users").findOne({ email });
+      if (studentUser) {
+        const studentSeries = studentUser.series;
+        const advisorUserIds = await getSeriesAdvisorUserIds(db, studentSeries);
+
+        // Notify Series Advisor(s)
+        await createNotification({
+          title: "Form Fill-up Submitted",
+          message: `${studentUser.name || studentUser.student_id || "A student"} (${studentUser.student_id || ""}) submitted semester form fill-up.`,
+          category: "approval",
+          link: "/dashboard/approvals",
+          audience: {
+            roles: ["advisor", "dept_head"],
+            series: [String(studentSeries)],
+            userIds: advisorUserIds,
+          },
+          actorId: String(studentUser._id),
+          dedupeKey: `ff_sub_${studentUser.student_id || studentUser.email}`,
+        });
+
+        // Notify Student
+        await createNotification({
+          title: "Form Fill-up Submitted",
+          message: "Your semester final form fill-up has been submitted and is pending advisor approval.",
+          category: "registration",
+          link: "/dashboard/form-fillup",
+          audience: {
+            userIds: [String(studentUser._id)],
+          },
+        });
+      }
 
       return NextResponse.redirect(
         `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/dashboard/form-fillup?payment=success`,
