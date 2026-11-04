@@ -3,6 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import clientPromise from "@/lib/mongodb";
 import bcrypt from "bcryptjs";
 import { isUserVerified } from "@/lib/verification";
+import { createNotification } from "@/lib/notifications";
 
 export const authOptions: NextAuthOptions = {
     secret: process.env.NEXTAUTH_SECRET,
@@ -38,6 +39,15 @@ export const authOptions: NextAuthOptions = {
                             { _id: user._id },
                             { $set: { lockoutUntil: new Date(Date.now() + 15 * 60 * 1000) } }
                         );
+
+                        await createNotification({
+                            title: "Account Security Lockout",
+                            message: `Account ${user.email} was locked due to 5 consecutive failed login attempts.`,
+                            category: "account",
+                            link: "/dashboard/user-mgmt",
+                            audience: { roles: ["admin"] },
+                        });
+
                         throw new Error("Account locked due to 5 failed attempts. Try again in 15 minutes.");
                     } else {
                         throw new Error("Invalid email or password");

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { logSystemAction } from "@/lib/logger";
+import { createNotification } from "@/lib/notifications";
 
 // GET: Fetches the active routine for all series, perfectly matched to their current semester
 export async function GET(req: Request) {
@@ -57,6 +58,31 @@ export async function POST(req: Request) {
     const result = await db.collection("routine_slots").insertOne(newSlot);
     await logSystemAction("Routine Slot Created", "System", `Slot added for ${data.courseCode}`);
 
+    // Resolve teacher userIds matching initials
+    const teacherInitials = Array.isArray(data.teachers) ? data.teachers : [];
+    let teacherUserIds: string[] = [];
+    if (teacherInitials.length > 0) {
+      const teacherDocs = await db.collection("users")
+        .find({ initials: { $in: teacherInitials } })
+        .project({ _id: 1 })
+        .toArray();
+      teacherUserIds = teacherDocs.map(t => String(t._id));
+    }
+
+    await createNotification({
+      title: `Routine Updated: ${data.courseCode}`,
+      message: `A routine slot for ${data.courseCode} (${data.day}, Room ${data.room || 'TBD'}) has been added.`,
+      category: "routine",
+      link: "/dashboard/routine",
+      audience: {
+        roles: ["student"],
+        series: [String(data.series)],
+        userIds: teacherUserIds,
+      },
+      actorId: session.user.id,
+      dedupeKey: `routine_${data.series}_${data.courseCode}`,
+    });
+
     // Return the full saved slot (including its new _id) so the client can update
     // its local state directly instead of refetching the whole routine.
     const savedSlot = { ...newSlot, _id: result.insertedId };
@@ -106,6 +132,31 @@ export async function PUT(req: Request) {
     );
 
     await logSystemAction("Routine Slot Updated", "System", `Slot updated for ${updateData.courseCode}`);
+
+    // Resolve teacher userIds matching initials
+    const teacherInitials = Array.isArray(updateData.teachers) ? updateData.teachers : [];
+    let teacherUserIds: string[] = [];
+    if (teacherInitials.length > 0) {
+      const teacherDocs = await db.collection("users")
+        .find({ initials: { $in: teacherInitials } })
+        .project({ _id: 1 })
+        .toArray();
+      teacherUserIds = teacherDocs.map(t => String(t._id));
+    }
+
+    await createNotification({
+      title: `Routine Updated: ${updateData.courseCode}`,
+      message: `The routine schedule for ${updateData.courseCode} (Series ${updateData.series}) has been modified.`,
+      category: "routine",
+      link: "/dashboard/routine",
+      audience: {
+        roles: ["student"],
+        series: [String(updateData.series)],
+        userIds: teacherUserIds,
+      },
+      actorId: session.user.id,
+      dedupeKey: `routine_${updateData.series}_${updateData.courseCode}`,
+    });
 
     // Return the full updated slot so the client can patch its local state directly.
     const savedSlot = { ...finalUpdate, _id };

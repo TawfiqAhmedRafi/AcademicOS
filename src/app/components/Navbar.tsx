@@ -5,7 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { useTheme } from "next-themes";
 import { useSession, signOut } from "next-auth/react";
-import { Menu, X, Bell, Moon, Sun, Loader2 } from "lucide-react";
+import { Menu, X, Moon, Sun, Loader2 } from "lucide-react";
+import NotificationBell from "./NotificationBell";
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
@@ -61,9 +62,7 @@ export default function Navbar() {
           {/* RIGHT: Utilities & Auth */}
           <div className="flex items-center gap-3 sm:gap-6">
             <div className="flex items-center gap-3 sm:gap-4">
-              <button className="rounded-full p-2 text-slate-500 transition-all hover:bg-slate-100 hover:text-ruet-gold dark:text-slate-400 dark:hover:bg-white/5">
-                <Bell size={20} />
-              </button>
+              {isAuthenticated && <NotificationBell align="right" />}
               {mounted ? (
                 <button
                   onClick={() => setTheme(currentTheme === "dark" ? "light" : "dark")}

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { logSystemAction } from "@/lib/logger";
+import { createNotification } from "@/lib/notifications";
 import * as XLSX from "xlsx";
 import bcrypt from "bcryptjs";
 
@@ -167,6 +168,16 @@ export async function PATCH(req: Request) {
          }
       );
       await logSystemAction("Semester Promoted", "System", `Series ${seriesDoc?.series} advanced from ${oldSemester} to ${payload.newSemester}`);
+
+      await createNotification({
+        title: `Semester Promoted: Semester ${payload.newSemester}`,
+        message: `Series ${seriesDoc?.series} has officially advanced from Semester ${oldSemester} to Semester ${payload.newSemester}.`,
+        category: "system",
+        link: "/dashboard",
+        audience: { roles: ["student"], series: [String(seriesDoc?.series)] },
+        actorId: session.user.id,
+      });
+
       return NextResponse.json({ message: "Semester updated and records safely frozen." });
     }
 
@@ -221,6 +232,21 @@ export async function PATCH(req: Request) {
       if (advisorEmail) await syncUserRole(advisorEmail);
       
       await logSystemAction("Advisor Assigned", "Audit", `Assigned ${advisorName} to Series ${seriesDoc?.series}.`);
+
+      if (advisorEmail) {
+        const advisorUser = await db.collection("users").findOne({ email: advisorEmail });
+        if (advisorUser) {
+          await createNotification({
+            title: `Appointed as Series Advisor`,
+            message: `You have been appointed as Series Advisor for Series ${seriesDoc?.series}.`,
+            category: "system",
+            link: "/dashboard/roster",
+            audience: { userIds: [String(advisorUser._id)] },
+            actorId: session.user.id,
+          });
+        }
+      }
+
       return NextResponse.json({ message: "Advisor assigned" });
     }
 

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
 import * as XLSX from "xlsx";
 import { logSystemAction } from "@/lib/logger";
+import { createNotification } from "@/lib/notifications";
 import { getUnifiedColumns } from "@/lib/markSegments";
 
 // Unified (single sheet) marks upload.
@@ -113,6 +114,16 @@ export async function POST(req: NextRequest) {
       "Audit",
       `${session.user.name} uploaded UNIFIED marks (${segments.join(", ")}) for ${courseCode} (Series ${series})`
     );
+
+    await createNotification({
+      title: `Marks Uploaded: ${courseCode}`,
+      message: `${session.user.name} submitted marks (${segments.join(", ")}) for ${courseCode} (Series ${series}).`,
+      category: "result",
+      link: "/dashboard/tabulation",
+      audience: { roles: ["advisor", "dept_head"], series: [String(series)] },
+      actorId: session.user.id,
+      dedupeKey: `marks_${series}_${courseCode}`,
+    });
 
     return NextResponse.json({ message: `Unified sheet processed: ${segments.length} segments saved.` });
   } catch (error: any) {

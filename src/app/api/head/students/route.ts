@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { logSystemAction } from "@/lib/logger";
+import { createNotification } from "@/lib/notifications";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -56,6 +57,16 @@ export async function PATCH(req: Request) {
       );
 
       await logSystemAction("Year Drop Processed", "Audit", `Student ${studentName} transferred to Series ${newSeries}`);
+
+      await createNotification({
+        title: "Academic Series Updated",
+        message: `Your academic profile has been updated to Series ${newSeries}. Please check your dashboard.`,
+        category: "system",
+        link: "/dashboard",
+        audience: { userIds: [String(studentId)] },
+        actorId: session.user.id,
+      });
+
       return NextResponse.json({ message: "Student series updated successfully." });
     }
 

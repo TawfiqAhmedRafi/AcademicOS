@@ -5,6 +5,7 @@ import clientPromise from "@/lib/mongodb";
 import bcrypt from "bcryptjs";
 import { ObjectId } from "mongodb";
 import { logSystemAction } from "@/lib/logger";
+import { createNotification } from "@/lib/notifications";
 
 const rankWeights: Record<string, number> = {
   "Professor": 1,
@@ -136,6 +137,14 @@ export async function PATCH(req: Request) {
         `User ID ${userId} was promoted to Department Head by Admin (${adminEmail})`
       );
 
+      await createNotification({
+        title: "Role Updated: Department Head",
+        message: "You have been officially appointed as the Head of the Department.",
+        category: "account",
+        link: "/dashboard",
+        audience: { userIds: [String(userId)] },
+      });
+
       return NextResponse.json({ message: "Department Head updated" });
     }
       
@@ -150,6 +159,14 @@ export async function PATCH(req: Request) {
         "Audit", 
         `User ID ${userId} promoted to ${newDesignation} by Admin (${adminEmail})`
       );
+
+      await createNotification({
+        title: "Designation Updated",
+        message: `Your academic designation has been updated to ${newDesignation}.`,
+        category: "account",
+        link: "/dashboard",
+        audience: { userIds: [String(userId)] },
+      });
 
       return NextResponse.json({ message: "Designation updated successfully" });
     }

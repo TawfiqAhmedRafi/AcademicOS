@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
 import { logSystemAction } from "@/lib/logger";
+import { createNotification } from "@/lib/notifications";
 
 // Helper to scrub old saved data
 const cleanCourseCode = (code: string) => {
@@ -138,6 +139,15 @@ export async function POST(req: Request) {
         createdAt: new Date(),
       });
       await logSystemAction("Calendar Published", "Audit", `Advisor published calendar for Series ${series} Sem ${semester}`);
+
+      await createNotification({
+        title: `Academic Calendar Published`,
+        message: `The official Academic Calendar for Semester ${semester} has been published by your Course Advisor.`,
+        category: "calendar",
+        link: "/dashboard/calendar",
+        audience: { roles: ["student"], series: [String(series)] },
+        actorId: session.user.id,
+      });
     }
 
     return NextResponse.json({ message: isPublish ? "Calendar Published" : "Draft Saved" });

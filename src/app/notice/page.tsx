@@ -75,7 +75,8 @@ export default function NoticeBoardPage() {
   };
 
   const seriesOptions = [
-    { label: "Broadcast to All Series", value: "all" },
+    { label: "Broadcast to All (Public)", value: "all" },
+    { label: "Faculty & Staff Only", value: "faculty" },
     ...seriesList.map(s => ({ label: `Series ${s.series} Only`, value: s.series }))
   ];
 

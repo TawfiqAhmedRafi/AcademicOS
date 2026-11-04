@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
+import { createNotification } from "@/lib/notifications";
 import { logSystemAction } from "@/lib/logger";
 
 export async function GET() {
@@ -138,11 +139,39 @@ export async function PATCH(req: Request) {
         { $set: { status: "published", publishedAt: new Date(), publishedBy: session.user.email } }
       );
 
+      await createNotification({
+        title: `Academic Results Published`,
+        message: `Official semester results for Series ${draft.series} (Semester ${draft.semester}) have been formally published.`,
+        category: "result",
+        link: "/dashboard/results",
+        audience: {
+          roles: ["student", "advisor"],
+          series: [String(draft.series)],
+        },
+        actorId: session.user.id,
+      });
+
       return NextResponse.json({ message: "Results officially published and synced." });
     }
 
     if (action === "reject") {
+      const draft = await db.collection("draft_results").findOne({ _id: new ObjectId(draftId) });
       await db.collection("draft_results").updateOne({ _id: new ObjectId(draftId) }, { $set: { status: "draft" } });
+
+      if (draft) {
+        await createNotification({
+          title: `Result Draft Returned`,
+          message: `The results draft for Series ${draft.series} was returned by the Head for corrections.`,
+          category: "result",
+          link: "/dashboard/tabulation",
+          audience: {
+            roles: ["advisor"],
+            series: [String(draft.series)],
+          },
+          actorId: session.user.id,
+        });
+      }
+
       return NextResponse.json({ message: "Draft rejected and returned to Advisor." });
     }
 

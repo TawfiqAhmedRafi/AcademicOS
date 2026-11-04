@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
 import { logSystemAction } from "@/lib/logger";
+import { createNotification } from "@/lib/notifications";
 import { ObjectId } from "mongodb"; // <-- NEW: Properly imported ObjectId
 
 export async function GET(req: Request) {
@@ -73,6 +74,18 @@ export async function PATCH(req: Request) {
     if (action === "toggle_registration") {
       await db.collection("series").updateOne({ series }, { $set: { "registration.isOpen": payload.isOpen, updatedAt: new Date() } });
       await logSystemAction("Registration Toggled", "System", `Registration for Series ${series} is now ${payload.isOpen ? 'OPEN' : 'CLOSED'}`);
+
+      if (payload.isOpen) {
+        await createNotification({
+          title: `Course Registration OPEN`,
+          message: `Course registration for Series ${series} is now open.` + (payload.deadline ? ` Deadline: ${new Date(payload.deadline).toLocaleDateString()}` : ''),
+          category: "registration",
+          link: "/dashboard/registration",
+          audience: { roles: ["student"], series: [String(series)] },
+          actorId: session.user.id,
+        });
+      }
+
       return NextResponse.json({ message: "Registration status updated" });
     }
 
@@ -84,6 +97,18 @@ export async function PATCH(req: Request) {
     if (action === "toggle_form_fillup") {
       await db.collection("series").updateOne({ series }, { $set: { "formFillup.isOpen": payload.isOpen, updatedAt: new Date() } });
       await logSystemAction("Form Fillup Toggled", "System", `Form Fill-up for Series ${series} is now ${payload.isOpen ? 'OPEN' : 'CLOSED'}`);
+
+      if (payload.isOpen) {
+        await createNotification({
+          title: `Exam Form Fill-up OPEN`,
+          message: `Semester final form fill-up for Series ${series} is now open.` + (payload.deadline ? ` Deadline: ${new Date(payload.deadline).toLocaleDateString()}` : ''),
+          category: "registration",
+          link: "/dashboard/form-fillup",
+          audience: { roles: ["student"], series: [String(series)] },
+          actorId: session.user.id,
+        });
+      }
+
       return NextResponse.json({ message: "Form Fill-up status updated" });
     }
 
@@ -95,6 +120,18 @@ export async function PATCH(req: Request) {
     if (action === "toggle_backlog_registration") {
       await db.collection("series").updateOne({ series }, { $set: { "backlogRegistration.isOpen": payload.isOpen, updatedAt: new Date() } });
       await logSystemAction("Backlog Reg Toggled", "System", `Backlog Registration for Series ${series} is now ${payload.isOpen ? 'OPEN' : 'CLOSED'}`);
+
+      if (payload.isOpen) {
+        await createNotification({
+          title: `Backlog Registration OPEN`,
+          message: `Backlog exam registration for Series ${series} is now open.`,
+          category: "registration",
+          link: "/dashboard/backlog-registration",
+          audience: { roles: ["student"], series: [String(series)] },
+          actorId: session.user.id,
+        });
+      }
+
       return NextResponse.json({ message: "Backlog Registration status updated" });
     }
 
@@ -109,6 +146,16 @@ export async function PATCH(req: Request) {
         { $set: { registrationStatus: "approved", updatedAt: new Date() } }
       );
       await logSystemAction("Bulk Approval", "Audit", `Course Registrations bulk approved for Series ${series}`);
+
+      await createNotification({
+        title: `Course Registrations Approved`,
+        message: `Your course registration for Series ${series} has been approved by your Series Advisor.`,
+        category: "approval",
+        link: "/dashboard/registration",
+        audience: { roles: ["student"], series: [String(series)] },
+        actorId: session.user.id,
+      });
+
       return NextResponse.json({ message: "All pending registrations approved." });
     }
 
@@ -118,6 +165,16 @@ export async function PATCH(req: Request) {
         { $set: { formFillupStatus: "approved", updatedAt: new Date() } }
       );
       await logSystemAction("Bulk Approval", "Audit", `Form Fill-ups bulk approved for Series ${series}`);
+
+      await createNotification({
+        title: `Form Fill-up Approved`,
+        message: `Your semester final form fill-up has been approved by your Series Advisor.`,
+        category: "approval",
+        link: "/dashboard/form-fillup",
+        audience: { roles: ["student"], series: [String(series)] },
+        actorId: session.user.id,
+      });
+
       return NextResponse.json({ message: "All pending form fill-ups approved." });
     }
 
@@ -130,6 +187,19 @@ export async function PATCH(req: Request) {
         { _id: new ObjectId(payload.studentId) },
         { $set: { registrationStatus: newStatus, updatedAt: new Date() } }
       );
+
+      await createNotification({
+        title: action === "approve_individual_reg" ? "Course Registration Approved" : "Registration Returned",
+        message:
+          action === "approve_individual_reg"
+            ? "Your course registration has been approved by your Series Advisor."
+            : "Your course registration was returned. Please review your courses and submit again.",
+        category: "approval",
+        link: "/dashboard/registration",
+        audience: { userIds: [String(payload.studentId)] },
+        actorId: session.user.id,
+      });
+
       return NextResponse.json({ message: `Registration ${newStatus}` });
     }
 
@@ -141,6 +211,19 @@ export async function PATCH(req: Request) {
         { _id: new ObjectId(payload.studentId) },
         { $set: { formFillupStatus: newStatus, updatedAt: new Date() } }
       );
+
+      await createNotification({
+        title: action === "approve_individual_ff" ? "Form Fill-up Approved" : "Form Fill-up Returned",
+        message:
+          action === "approve_individual_ff"
+            ? "Your semester final form fill-up has been approved."
+            : "Your semester final form fill-up was returned. Please verify your details and resubmit.",
+        category: "approval",
+        link: "/dashboard/form-fillup",
+        audience: { userIds: [String(payload.studentId)] },
+        actorId: session.user.id,
+      });
+
       return NextResponse.json({ message: `Form Fill-up ${newStatus}` });
     }
 

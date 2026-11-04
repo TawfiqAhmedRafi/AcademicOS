@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
+import { createNotification } from "@/lib/notifications";
 
 // RUET Grade Mapping & Cap Logic
 function getGradeScale(totalMarks: number, isBacklog: boolean = false) {
@@ -398,6 +399,16 @@ export async function PATCH(req: Request) {
         { series: Number(series), semester },
         { $set: { status: "pending_head_approval", submittedAt: new Date() } }
       );
+
+      await createNotification({
+        title: `Results Submitted for Review`,
+        message: `Results draft for Series ${series} (${semester}) has been submitted for Head approval.`,
+        category: "result",
+        link: "/dashboard/head-results",
+        audience: { roles: ["dept_head"] },
+        actorId: session.user.id,
+      });
+
       return NextResponse.json({ message: "Submitted to Head" });
     }
 
